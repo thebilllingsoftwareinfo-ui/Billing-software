@@ -202,17 +202,8 @@ export class ExpenseService {
     };
 
     return fallbackExpense;
-
-    // Audit Log
-    await logAudit(session, 'expense.created', 'expenses', expense.id, {
-      category_name: category.name,
-      amount_paise: validated.amount_paise,
-      vendor_name: validated.vendor_name,
-      expense_date: validated.expense_date,
-    });
-
-    return expense;
   }
+
 
   /**
    * Updates an existing expense record.

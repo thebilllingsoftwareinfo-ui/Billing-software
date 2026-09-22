@@ -42,12 +42,13 @@ export class PurchaseService {
 
     if (!rawSupplier) {
       // Check if it's a party in customers table
-      const { data: rawParty } = await supabase
+      const { data: rawPartyData } = await supabase
         .from('customers')
         .select('id, display_name, state, gstin')
         .eq('id', validated.supplier_id)
         .eq('organization_id', orgId)
         .single();
+      const rawParty = rawPartyData as any;
 
       if (rawParty) {
         const stateCode = rawParty.state?.match(/\d+/)?.[0] || '27';

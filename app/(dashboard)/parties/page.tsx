@@ -162,7 +162,7 @@ export default function PartiesPage() {
 
   // Action Modals (View/Edit, Preview/PDF, Receive Payment, View History)
   const [actionModalType, setActionModalType] = useState<
-    'view_edit' | 'preview' | 'preview_challan' | 'receive_payment' | 'view_history' | null
+    'view_edit' | 'preview' | 'preview_challan' | 'receive_payment' | 'view_history' | 'payment_out' | null
   >(null)
   const [activeModalTx, setActiveModalTx] = useState<PartyTransaction | null>(null)
 

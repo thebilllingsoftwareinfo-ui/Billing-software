@@ -825,11 +825,9 @@ function PaymentOutContent({
 
       </div>
 
-      {/* Quick Add Party Modal */}
       {isAddPartyOpen && (
         <AddPartyModal
           isOpen={isAddPartyOpen}
-          initialPartyType="supplier"
           onClose={() => setIsAddPartyOpen(false)}
           onSave={(newParty) => {
             const added = {

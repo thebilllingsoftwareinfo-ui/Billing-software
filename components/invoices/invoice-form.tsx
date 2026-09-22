@@ -43,6 +43,7 @@ import { calculateInvoiceServerSide } from '@/lib/services/invoice.service'
 import { INDIAN_STATES, filterIndianStates, findState } from '@/lib/constants/indian-states'
 import { PDFTemplateType, TEMPLATE_OPTIONS } from '@/lib/constants/invoice-templates'
 import { AddItemView } from '@/components/products/add-item-view'
+import { lookupProductByBarcode } from '@/lib/services/barcode.service'
 import { STANDARD_GST_RATES, isUtgstTerritory } from '@/lib/services/tax.service'
 import { STANDARD_UNITS } from '@/lib/services/unit.service'
 
@@ -152,6 +153,7 @@ export function InvoiceForm({ initialData, isEditing = false, isFullDesktop = fa
     initialData?.place_of_supply || initialData?.customers?.state || ''
   )
   const [isSavingCustomer, setIsSavingCustomer] = useState<boolean>(false)
+  const [saveAsRegularCustomer, setSaveAsRegularCustomer] = useState<boolean>(false)
 
   // Link Invoice State
   const [isLinkingInvoice, setIsLinkingInvoice] = useState<boolean>(
