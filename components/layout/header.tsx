@@ -105,7 +105,7 @@ export function Header({
                     <button
                       onClick={() => {
                         setOrgDropdownOpen(false)
-                        router.push('/settings')
+                        router.push('/settings/business-profile')
                       }}
                       className="w-full text-left px-3.5 py-2 text-red-600 hover:bg-red-50/50 font-semibold"
                     >
