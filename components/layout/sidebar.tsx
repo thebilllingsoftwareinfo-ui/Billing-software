@@ -406,7 +406,7 @@ export function Sidebar({ orgName, orgInitials, businessCategory, onCloseMobile 
 
           {/* User / My Company Bottom Pill */}
           <Link
-            href="/settings"
+            href="/settings/business-profile"
             className="w-full flex items-center justify-between p-2 rounded-xl bg-[#141724] hover:bg-[#1b2034] border border-slate-800 text-slate-300 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0">

@@ -13,6 +13,10 @@ import {
   Check,
   Plus,
   Edit2,
+  Printer,
+  MoreVertical,
+  Bell,
+  Eye,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getInitials } from '@/lib/utils/helpers'
@@ -105,7 +109,7 @@ export function Header({
                     <button
                       onClick={() => {
                         setOrgDropdownOpen(false)
-                        router.push('/settings/business-profile')
+                        router.push('/settings')
                       }}
                       className="w-full text-left px-3.5 py-2 text-red-600 hover:bg-red-50/50 font-semibold"
                     >
@@ -144,70 +148,91 @@ export function Header({
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => router.push('/sales/invoices/new')}
-              className="h-7 px-2.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="h-7 px-3.5 bg-[#ef233c] hover:bg-[#d90429] text-white text-[12px] font-semibold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Create GST Sale Invoice (F2)"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-4 w-4" />
               <span>Add Sale</span>
-              <span className="text-[9px] bg-red-800/80 px-1 py-0.2 rounded font-mono font-normal">F2</span>
             </button>
 
             <button
               onClick={() => router.push('/purchases/bills/new')}
-              className="h-7 px-2.5 bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="h-7 px-3.5 bg-blue-600 hover:bg-blue-700 text-white text-[12px] font-semibold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Record Purchase Bill (F3)"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-4 w-4" />
               <span>Add Purchase</span>
-              <span className="text-[9px] bg-blue-900/80 px-1 py-0.2 rounded font-mono font-normal">F3</span>
             </button>
           </div>
 
           <div className="h-4 w-px bg-gray-200 mx-1 hidden sm:block" />
 
-          {/* Quick Create (+) Dropdown Modal */}
           <QuickCreateModal />
 
-          {/* User Menu */}
+          {/* Print Icon */}
+          <button
+            onClick={() => window.print()}
+            className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 transition-colors text-gray-500 cursor-pointer"
+            title="Print"
+          >
+            <Printer className="h-4 w-4" />
+          </button>
+
+          {/* User Menu / 3 Dots */}
           <div className="relative">
             <button
               onClick={() => setDropdownOpen((v) => !v)}
-              className="flex items-center gap-1.5 h-7 px-1.5 rounded-lg hover:bg-gray-100 transition-colors text-xs text-gray-700"
+              className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 transition-colors text-gray-500 cursor-pointer"
             >
-              <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shadow-2xs">
-                {initials}
-              </div>
-              <ChevronDown className="h-3 w-3 text-gray-400" />
+              <MoreVertical className="h-4 w-4" />
             </button>
 
             {dropdownOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
-                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-gray-200 shadow-xl z-20 py-1 text-xs">
-                  <div className="px-3.5 py-2 border-b border-gray-100">
-                    <p className="font-bold text-gray-900 truncate">{displayName}</p>
-                    <p className="text-[10px] text-gray-400 truncate">{userEmail}</p>
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-gray-200 shadow-lg z-20 py-2 text-sm text-gray-600">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false)
+                      router.push('/dashboard/notifications')
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span>Notifications</span>
+                  </button>
+                  <div className="w-full flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Eye className="h-4 w-4" />
+                      <span>Privacy</span>
+                    </div>
+                    {/* Fake toggle for looks */}
+                    <div className="w-8 h-4 bg-gray-200 rounded-full relative">
+                      <div className="w-3 h-3 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm"></div>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
                       setDropdownOpen(false)
                       router.push('/settings')
                     }}
-                    className="w-full flex items-center gap-2 px-3.5 py-2 text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
                   >
-                    <Settings className="h-3.5 w-3.5 text-gray-400" />
-                    Settings
+                    <Settings className="h-4 w-4" />
+                    <span>Settings</span>
                   </button>
-                  <div className="border-t border-gray-100 mt-1 pt-1">
-                    <button
-                      onClick={handleSignOut}
-                      disabled={isSigningOut}
-                      className="w-full flex items-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 font-medium transition-colors disabled:opacity-50"
-                    >
-                      <LogOut className="h-3.5 w-3.5" />
-                      {isSigningOut ? 'Signing out…' : 'Sign out'}
-                    </button>
-                  </div>
+                  <div className="my-1 border-t border-gray-100"></div>
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false)
+                      handleSignOut()
+                    }}
+                    disabled={isSigningOut}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 text-red-600 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>{isSigningOut ? 'Signing out…' : 'Sign out'}</span>
+                  </button>
                 </div>
               </>
             )}
