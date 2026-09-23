@@ -19,6 +19,7 @@ export const invoiceItemSchema = z.object({
   cess_amount: z.number().min(0).optional(),
   tax_treatment: z.string().optional(),
   is_gst_inclusive: z.boolean().default(false),
+  custom_fields: z.record(z.any()).optional().nullable(),
 })
 
 export const createInvoiceSchema = z.object({

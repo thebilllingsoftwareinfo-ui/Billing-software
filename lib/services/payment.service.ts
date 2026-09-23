@@ -40,7 +40,7 @@ export class PaymentService {
       });
       return {
         payment_id: demoRes.id,
-        amount_paise: validatedPayload.amount_paise,
+        amount: validatedPayload.amount,
         allocated_invoices: demoRes.allocations,
         created_at: demoRes.created_at,
       };
@@ -51,7 +51,7 @@ export class PaymentService {
     // 1. Verify Customer belongs to Organization
     const { data: rawCustomer, error: customerErr } = await supabase
       .from('customers')
-      .select('id, name, email, gstin, outstanding_paise')
+      .select('id, name, email, gstin, outstanding')
       .eq('id', validatedPayload.customer_id)
       .eq('organization_id', orgId)
       .single();
@@ -65,7 +65,7 @@ export class PaymentService {
       });
       return {
         payment_id: demoRes.id,
-        amount_paise: validatedPayload.amount_paise,
+        amount: validatedPayload.amount,
         allocated_invoices: demoRes.allocations,
         created_at: demoRes.created_at,
       };
@@ -73,13 +73,13 @@ export class PaymentService {
 
     // 2. Total allocated validation
     const totalAllocatedPaise = validatedPayload.allocations.reduce(
-      (sum, item) => sum + item.allocated_paise,
+      (sum, item) => sum + item.allocated,
       0
     );
 
-    if (totalAllocatedPaise > validatedPayload.amount_paise) {
+    if (totalAllocatedPaise > validatedPayload.amount) {
       throw new Error(
-        `Total allocated amount (₹${(totalAllocatedPaise / 100).toFixed(2)}) cannot exceed total payment amount (₹${(validatedPayload.amount_paise / 100).toFixed(2)})`
+        `Total allocated amount (₹${(totalAllocatedPaise ).toFixed(2)}) cannot exceed total payment amount (₹${(validatedPayload.amount ).toFixed(2)})`
       );
     }
 
@@ -87,7 +87,7 @@ export class PaymentService {
     const invoiceIds = validatedPayload.allocations.map((a) => a.invoice_id);
     const { data: rawInvoices, error: invoicesErr } = await supabase
       .from('invoices')
-      .select('id, invoice_number, total_paise, paid_paise, status, customer_id')
+      .select('id, invoice_number, total, paid, status, customer_id')
       .in('id', invoiceIds)
       .eq('organization_id', orgId);
 
@@ -100,9 +100,9 @@ export class PaymentService {
     const invoiceUpdates: Array<{
       id: string;
       invoice_number: string;
-      new_paid_paise: number;
+      new_paid: number;
       new_status: string;
-      allocated_paise: number;
+      allocated: number;
     }> = [];
 
     for (const allocation of validatedPayload.allocations) {
@@ -115,17 +115,17 @@ export class PaymentService {
         throw new Error(`Invoice ${inv.invoice_number} does not belong to selected customer`);
       }
 
-      const currentPaid = Number(inv.paid_paise || 0);
-      const invoiceTotal = Number(inv.total_paise || 0);
+      const currentPaid = Number(inv.paid || 0);
+      const invoiceTotal = Number(inv.total || 0);
       const currentOutstanding = Math.max(0, invoiceTotal - currentPaid);
 
-      if (allocation.allocated_paise > currentOutstanding && !validatedPayload.allow_overpayment) {
+      if (allocation.allocated > currentOutstanding && !validatedPayload.allow_overpayment) {
         throw new Error(
-          `Overpayment Guard: Allocated payment ₹${(allocation.allocated_paise / 100).toFixed(2)} exceeds invoice ${inv.invoice_number} outstanding balance ₹${(currentOutstanding / 100).toFixed(2)}. Enable explicit overpayment policy to override.`
+          `Overpayment Guard: Allocated payment ₹${(allocation.allocated ).toFixed(2)} exceeds invoice ${inv.invoice_number} outstanding balance ₹${(currentOutstanding ).toFixed(2)}. Enable explicit overpayment policy to override.`
         );
       }
 
-      const newPaidPaise = currentPaid + allocation.allocated_paise;
+      const newPaidPaise = currentPaid + allocation.allocated;
       
       // Calculate auto status transition
       let newStatus = inv.status;
@@ -140,9 +140,9 @@ export class PaymentService {
       invoiceUpdates.push({
         id: inv.id,
         invoice_number: inv.invoice_number,
-        new_paid_paise: newPaidPaise,
+        new_paid: newPaidPaise,
         new_status: newStatus,
-        allocated_paise: allocation.allocated_paise,
+        allocated: allocation.allocated,
       });
     }
 
@@ -153,7 +153,7 @@ export class PaymentService {
         organization_id: orgId,
         customer_id: validatedPayload.customer_id,
         payment_date: validatedPayload.payment_date,
-        amount_paise: validatedPayload.amount_paise,
+        amount: validatedPayload.amount,
         payment_method: validatedPayload.payment_method,
         reference_number: validatedPayload.reference_number || null,
         notes: validatedPayload.notes || null,
@@ -171,7 +171,7 @@ export class PaymentService {
     const allocationRows = invoiceUpdates.map((update) => ({
       payment_id: paymentRecord.id,
       invoice_id: update.id,
-      allocated_paise: update.allocated_paise,
+      allocated: update.allocated,
     }));
 
     const { error: allocInsertErr } = await supabase
@@ -182,11 +182,11 @@ export class PaymentService {
       throw new Error(`Failed to insert payment allocations: ${allocInsertErr.message}`);
     }
 
-    // 6. Update target invoices (paid_paise & status)
+    // 6. Update target invoices (paid & status)
     for (const update of invoiceUpdates) {
       const { error: updateInvErr } = await (supabase.from('invoices') as any)
         .update({
-          paid_paise: update.new_paid_paise,
+          paid: update.new_paid,
           status: update.new_status,
           updated_at: new Date().toISOString(),
         })
@@ -205,7 +205,7 @@ export class PaymentService {
     await logAudit(session, 'payment.created', 'payments', paymentRecord.id, {
       customer_id: validatedPayload.customer_id,
       customer_name: customer.name,
-      amount_paise: validatedPayload.amount_paise,
+      amount: validatedPayload.amount,
       payment_method: validatedPayload.payment_method,
       allocations_count: validatedPayload.allocations.length,
       allocated_invoices: invoiceUpdates.map((u) => u.invoice_number),
@@ -213,7 +213,7 @@ export class PaymentService {
 
     return {
       payment_id: paymentRecord.id,
-      amount_paise: validatedPayload.amount_paise,
+      amount: validatedPayload.amount,
       allocated_invoices: invoiceUpdates,
       created_at: paymentRecord.created_at,
     };
@@ -227,21 +227,21 @@ export class PaymentService {
 
     const { data: rawUnpaidInvoices } = await supabase
       .from('invoices')
-      .select('total_paise, paid_paise')
+      .select('total, paid')
       .eq('organization_id', organizationId)
       .eq('customer_id', customerId)
       .not('status', 'in', '("draft","void","cancelled")');
 
     const unpaidInvoices = (rawUnpaidInvoices || []) as any[];
     const totalOutstandingPaise = unpaidInvoices.reduce((sum, inv) => {
-      const total = Number(inv.total_paise || 0);
-      const paid = Number(inv.paid_paise || 0);
+      const total = Number(inv.total || 0);
+      const paid = Number(inv.paid || 0);
       return sum + Math.max(0, total - paid);
     }, 0);
 
     await (supabase.from('customers') as any)
       .update({
-        outstanding_paise: totalOutstandingPaise,
+        outstanding: totalOutstandingPaise,
         updated_at: new Date().toISOString(),
       })
       .eq('id', customerId)
@@ -274,7 +274,7 @@ export class PaymentService {
           organization_id,
           customer_id,
           payment_date,
-          amount_paise,
+          amount,
           payment_method,
           reference_number,
           notes,
@@ -302,13 +302,13 @@ export class PaymentService {
         .from('payment_allocations')
         .select(`
           id,
-          allocated_paise,
+          allocated,
           invoices (
             id,
             invoice_number,
             invoice_date,
-            total_paise,
-            paid_paise,
+            total,
+            paid,
             status
           )
         `)
@@ -358,7 +358,7 @@ export class PaymentService {
         `
         id,
         payment_date,
-        amount_paise,
+        amount,
         payment_method,
         reference_number,
         created_at,
@@ -412,4 +412,5 @@ export class PaymentService {
     };
   }
 }
+
 

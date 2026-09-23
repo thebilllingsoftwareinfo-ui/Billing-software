@@ -31,6 +31,7 @@ export interface InvoiceCalculatedLine {
   tax_amount: number
   line_total: number
   is_gst_inclusive: boolean
+  custom_fields?: any
 }
 
 export interface InvoiceCalculatedTotals {
@@ -68,6 +69,7 @@ export function calculateInvoiceServerSide(
     cess_amount?: number
     tax_treatment?: string
     is_gst_inclusive?: boolean
+    custom_fields?: any
   }>,
   discountType: 'fixed' | 'percent' = 'fixed',
   discountValue: number = 0,
@@ -130,6 +132,7 @@ export function calculateInvoiceServerSide(
       tax_amount: l.total_tax,
       line_total: l.line_total,
       is_gst_inclusive: (items.find((i) => i.description === l.description)?.is_gst_inclusive || false),
+      custom_fields: items.find((i) => i.description === l.description)?.custom_fields || {},
     })),
   }
 }
@@ -301,6 +304,7 @@ export async function createInvoiceService(
     tax_amount: l.tax_amount,
     line_total: l.line_total,
     is_gst_inclusive: l.is_gst_inclusive,
+    custom_fields: l.custom_fields,
   }))
 
   const { error: itemsError } = await (supabase.from('invoice_items') as any).insert(itemInserts as any[])
@@ -453,6 +457,7 @@ export async function updateInvoiceService(
     tax_amount: l.tax_amount,
     line_total: l.line_total,
     is_gst_inclusive: l.is_gst_inclusive,
+    custom_fields: l.custom_fields,
   }))
 
   await (supabase.from('invoice_items') as any).insert(itemInserts as any[])

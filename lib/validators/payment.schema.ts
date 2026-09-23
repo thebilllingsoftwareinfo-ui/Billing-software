@@ -14,7 +14,7 @@ export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
 export const paymentAllocationSchema = z.object({
   invoice_id: z.string().uuid('Invalid invoice ID'),
-  allocated_paise: z.number().int('Allocated amount must be an integer in paise').positive('Allocated amount must be positive'),
+  allocated_amount: z.number().positive('Allocated amount must be positive'),
 });
 
 export type PaymentAllocationInput = z.infer<typeof paymentAllocationSchema>;
@@ -22,7 +22,7 @@ export type PaymentAllocationInput = z.infer<typeof paymentAllocationSchema>;
 export const createPaymentSchema = z.object({
   customer_id: z.string().uuid('Customer is required'),
   payment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Payment date must be YYYY-MM-DD'),
-  amount_paise: z.number().int('Payment amount must be an integer in paise').positive('Payment amount must be greater than zero'),
+  amount: z.number().positive('Payment amount must be greater than zero'),
   payment_method: paymentMethodSchema,
   reference_number: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
