@@ -42,14 +42,24 @@ export default function PurchaseBillsDirectoryPage() {
     toast.success(`Purchase Bill ${b.bill_number} deleted`);
   };
 
-  const handleCancelBill = (b: any) => {
-    setBills((prev) =>
-      prev.map((item) => (item.id === b.id ? { ...item, status: 'void' } : item))
-    );
-    toast.info(`Purchase Bill ${b.bill_number} marked as cancelled`);
+  const handleCancelBill = async (b: any) => {
+    if (!confirm(`Are you sure you want to cancel purchase bill '${b.bill_number}'? This will reverse stock, clear supplier payable, and reverse any cash/bank payment.`)) return;
+    try {
+      const res = await fetch(`/api/purchases/${b.id}/cancel`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to cancel bill');
+      }
+      toast.success(`Purchase Bill ${b.bill_number} cancelled and reversed successfully`);
+      fetchBills();
+    } catch (err: any) {
+      toast.error(err.message || 'Error cancelling purchase bill');
+    }
   };
 
-  const handleRecordPayment = (b: any) => {
+  const handleRecordPayment = async (b: any) => {
     const due = Math.max(0, (b.total_paise || 0) - (b.paid_paise || 0));
     if (due <= 0) {
       toast.info('This bill is already fully paid!');
@@ -63,19 +73,27 @@ export default function PurchaseBillsDirectoryPage() {
       toast.error('Invalid payment amount');
       return;
     }
-    const amtPaise = Math.round(amt * 100);
-    setBills((prev) =>
-      prev.map((item) => {
-        if (item.id !== b.id) return item;
-        const newPaid = (item.paid_paise || 0) + amtPaise;
-        return {
-          ...item,
-          paid_paise: newPaid,
-          status: newPaid >= item.total_paise ? 'paid' : 'partial',
-        };
-      })
-    );
-    toast.success(`Recorded payment of ₹${amt.toFixed(2)} against ${b.bill_number}!`);
+    try {
+      const res = await fetch(`/api/purchases/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplier_id: b.supplier_id || b.suppliers?.id,
+          purchase_bill_id: b.id,
+          amount: amt,
+          payment_date: new Date().toISOString().split('T')[0],
+          payment_method: 'cash',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to record payment');
+      }
+      toast.success(`Recorded payment of ₹${amt.toFixed(2)} against ${b.bill_number}!`);
+      fetchBills();
+    } catch (err: any) {
+      toast.error(err.message || 'Payment recording failed');
+    }
   };
 
   const handlePrintBill = (b: any) => {
@@ -120,12 +138,16 @@ export default function PurchaseBillsDirectoryPage() {
     switch (status) {
       case 'draft':
         return <Badge variant="secondary" className="bg-slate-100 text-slate-700">DRAFT</Badge>;
+      case 'unpaid':
       case 'approved':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">APPROVED</Badge>;
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">UNPAID</Badge>;
       case 'paid':
         return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">PAID</Badge>;
       case 'partial':
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 font-medium">PARTIAL</Badge>;
+      case 'cancelled':
+      case 'void':
+        return <Badge variant="destructive" className="bg-rose-50 text-rose-700 border-rose-200 font-medium">CANCELLED</Badge>;
       case 'overdue':
         return <Badge variant="destructive">OVERDUE</Badge>;
       default:
@@ -215,10 +237,11 @@ export default function PurchaseBillsDirectoryPage() {
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="approved">Unpaid</SelectItem>
               <SelectItem value="partial">Partial</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
         </div>

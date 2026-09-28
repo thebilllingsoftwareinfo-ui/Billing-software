@@ -35,6 +35,11 @@ const USER_B = {
 async function runMultiTenantSecurityAudit() {
   console.log('🔒 Starting WEVLY BUSINESSOS Multi-Tenant Security & Anti-IDOR Audit...\n')
 
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('  ⚠️ Skipped: Live Supabase environment credentials not configured (Supabase mode test)\n')
+    return
+  }
+
   let passed = 0
   let total = 0
 
@@ -148,10 +153,10 @@ async function runMultiTenantSecurityAudit() {
       await PaymentService.recordPayment(USER_A as any, {
         customer_id: bCustId,
         payment_date: '2026-01-01',
-        amount_paise: 10000,
+        amount: 10000,
         payment_method: 'cash',
         allow_overpayment: false,
-        allocations: [{ invoice_id: bInvId, allocated_paise: 10000 }],
+        allocations: [{ invoice_id: bInvId, allocated_amount: 10000 }],
       })
       assert.fail('Payment creation against Org B invoice must be rejected')
     } catch (err: any) {

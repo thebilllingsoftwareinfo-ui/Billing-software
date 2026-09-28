@@ -4,6 +4,7 @@ import { cancelInvoiceSchema } from '@/lib/validators/invoice.schema'
 import { can } from '@/lib/auth/permissions'
 import { getApiSession } from '@/lib/auth/api-session'
 import { demoCancelInvoice } from '@/lib/services/demo-store'
+import { SalespersonService } from '@/lib/services/salesperson.service'
 
 export async function POST(
   request: NextRequest,
@@ -33,6 +34,11 @@ export async function POST(
 
     if (session.user_id.includes('demo')) {
       const cancelled = demoCancelInvoice(id, parsed.data.reason)
+      try {
+        await SalespersonService.reverseSalesCommission(session, id)
+      } catch (revErr: any) {
+        console.warn('[Invoice Cancel API] Commission reverse notice (demo):', revErr?.message)
+      }
       return NextResponse.json({
         success: true,
         data: cancelled || {
@@ -45,9 +51,19 @@ export async function POST(
 
     try {
       const cancelled = await cancelInvoiceService(session.organization_id, session.user_id, id, parsed.data.reason)
+      try {
+        await SalespersonService.reverseSalesCommission(session, id)
+      } catch (revErr: any) {
+        console.warn('[Invoice Cancel API] Commission reverse notice:', revErr?.message)
+      }
       return NextResponse.json({ success: true, data: cancelled })
     } catch (serviceErr: any) {
       const cancelled = demoCancelInvoice(id, parsed.data.reason)
+      try {
+        await SalespersonService.reverseSalesCommission(session, id)
+      } catch (revErr: any) {
+        console.warn('[Invoice Cancel API] Commission reverse notice (fallback):', revErr?.message)
+      }
       return NextResponse.json({
         success: true,
         data: cancelled || {

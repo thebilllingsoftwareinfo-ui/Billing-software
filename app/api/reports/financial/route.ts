@@ -3,6 +3,8 @@ import { getAppSession } from '@/lib/auth/session';
 import { ReportService, ReportDatePreset } from '@/lib/services/report.service';
 import { generateCSV } from '@/lib/utils/csv-exporter';
 
+import { requirePermission } from '@/lib/auth/permissions';
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getAppSession();
@@ -19,6 +21,17 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const exportMode = searchParams.get('export');
+
+    const role = (session as any).role || (session as any).member?.role || 'accountant';
+    if (subType === 'expenses') {
+      requirePermission(role, 'reports.expenses');
+    } else if (subType === 'receivables') {
+      requirePermission(role, 'reports.receivables');
+    } else if (subType === 'payables') {
+      requirePermission(role, 'reports.payables');
+    } else {
+      requirePermission(role, 'reports.view');
+    }
 
     const data = await ReportService.getFinancialReport(session, {
       range,

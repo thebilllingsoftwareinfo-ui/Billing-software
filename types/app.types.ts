@@ -4,15 +4,7 @@
 
 export type OrgRole = 'owner' | 'admin' | 'manager' | 'accountant' | 'sales' | 'inventory' | 'staff'
 
-export type BusinessCategory =
-  | 'retail'
-  | 'wholesale'
-  | 'services'
-  | 'manufacturing'
-  | 'restaurant'
-  | 'freelancer'
-  | 'jewelry'
-  | 'medical'
+export type BusinessCategory = string
 
 export type MemberStatus = 'active' | 'invited' | 'suspended'
 
@@ -121,6 +113,8 @@ export interface AppSession {
   organization_id: string
   user_id: string
   role: OrgRole
+  org_id?: string
+  email?: string
 }
 
 // ---- Address -----------------------------------------------
@@ -137,23 +131,33 @@ export interface Address {
 // ---- GST ---------------------------------------------------
 
 export interface GstBreakdown {
-  subtotal_paise: number
-  discount_paise: number
-  taxable_paise: number
-  cgst_paise: number
-  sgst_paise: number
-  igst_paise: number
-  cess_paise: number
-  total_paise: number
+  subtotal: number
+  discount_amount: number
+  taxable_amount: number
+  cgst_amount: number
+  sgst_amount: number
+  igst_amount: number
+  cess_amount: number
+  total_amount: number
+  // Legacy paise aliases for backward compatibility if needed
+  subtotal_paise?: number
+  discount_paise?: number
+  taxable_paise?: number
+  cgst_paise?: number
+  sgst_paise?: number
+  igst_paise?: number
+  cess_paise?: number
+  total_paise?: number
 }
 
 export interface GstLineItem {
   quantity: number
-  unit_price_paise: number
+  unit_price: number
   discount_pct: number
   gst_rate: number
   gst_type: GstType
   is_inter_state: boolean
+  unit_price_paise?: number
 }
 
 // ---- API response wrapper ----------------------------------
@@ -191,7 +195,7 @@ export interface PaginationParams {
 
 // ---- Global Search ------------------------------------------
 
-export type SearchEntityType = 'customer' | 'supplier' | 'product' | 'invoice' | 'quotation' | 'payment'
+export type SearchEntityType = 'customer' | 'supplier' | 'product' | 'invoice' | 'quotation' | 'payment' | 'purchase_bill'
 
 export interface SearchResultItem {
   id: string
@@ -199,6 +203,7 @@ export interface SearchResultItem {
   title: string
   subtitle: string
   status?: string
+  amount?: number
   amount_paise?: number
   url: string
 }

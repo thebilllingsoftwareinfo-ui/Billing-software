@@ -56,12 +56,16 @@ export default function SupplierStatementPage({
     switch (status) {
       case 'draft':
         return <Badge variant="secondary" className="bg-slate-100 text-slate-700">DRAFT</Badge>;
+      case 'unpaid':
       case 'approved':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">APPROVED</Badge>;
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">UNPAID</Badge>;
       case 'paid':
         return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">PAID</Badge>;
       case 'partial':
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 font-medium">PARTIAL</Badge>;
+      case 'cancelled':
+      case 'void':
+        return <Badge variant="destructive" className="bg-rose-50 text-rose-700 border-rose-200 font-medium">CANCELLED</Badge>;
       case 'overdue':
         return <Badge variant="destructive">OVERDUE</Badge>;
       default:
@@ -112,9 +116,16 @@ export default function SupplierStatementPage({
           </div>
         </div>
 
-        <Button variant="outline" size="sm" onClick={handlePrintStatement}>
-          <Printer className="w-4 h-4 mr-1.5" /> Print Statement
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href={`/suppliers/${id}`}>
+            <Button variant="default" size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+              View 360° Profile
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={handlePrintStatement}>
+            <Printer className="w-4 h-4 mr-1.5" /> Print Statement
+          </Button>
+        </div>
       </div>
 
       {/* Supplier Profile Info Card */}

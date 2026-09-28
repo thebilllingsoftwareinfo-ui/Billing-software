@@ -75,14 +75,13 @@ function PaymentOutContent({
 
   // Payment Type
   const [paymentTypes, setPaymentTypes] = useState<string[]>([
-    'rahul',
     'Cash',
     'Bank Account',
-    'Cheque',
     'UPI',
+    'Cheque',
     'Net Banking',
   ]);
-  const [paymentType, setPaymentType] = useState<string>('rahul');
+  const [paymentType, setPaymentType] = useState<string>('Cash');
   const [isAddingPaymentType, setIsAddingPaymentType] = useState(false);
   const [newPaymentTypeName, setNewPaymentTypeName] = useState('');
 
@@ -127,15 +126,18 @@ function PaymentOutContent({
         if (custRes.ok) {
           const custData = await custRes.json();
           const list = custData.data || custData.customers || [];
-          list.forEach((c: any) =>
+          list.forEach((c: any) => {
+            const bal = c.outstanding_balance !== undefined && c.outstanding_balance !== null
+              ? Number(c.outstanding_balance)
+              : (c.outstanding_paise ? Number(c.outstanding_paise) / 100 : 0);
             loaded.push({
               id: c.id,
               name: c.name || c.display_name,
               phone: c.phone || c.mobile || '',
-              balance: (c.outstanding_paise || c.outstanding_balance || 0) / 100,
+              balance: bal,
               type: 'Customer',
-            })
-          );
+            });
+          });
         }
 
         if (supRes.ok) {
@@ -143,11 +145,14 @@ function PaymentOutContent({
           const list = supData.data || supData.suppliers || [];
           list.forEach((s: any) => {
             if (!loaded.find((l) => l.name === s.name)) {
+              const bal = s.outstanding_balance !== undefined && s.outstanding_balance !== null
+                ? Number(s.outstanding_balance)
+                : (s.outstanding_paise ? Number(s.outstanding_paise) / 100 : 0);
               loaded.push({
                 id: s.id,
                 name: s.name,
                 phone: s.phone || '',
-                balance: (s.outstanding_balance || 0) / 100,
+                balance: bal,
                 type: 'Supplier',
               });
             }
@@ -319,10 +324,8 @@ function PaymentOutContent({
       if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
-      console.warn('Payment-Out save warning:', err);
-      toast.success(`Payment-Out of ₹${amount.toLocaleString('en-IN')} recorded successfully!`);
-      if (onSuccess) onSuccess();
-      onClose();
+      console.error('Payment-Out save error:', err);
+      toast.error(err.message || 'Failed to save Payment-Out');
     } finally {
       setSubmitting(false);
     }

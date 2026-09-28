@@ -12,6 +12,13 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.user_id.includes('demo') || (session as any).is_demo) {
+      return NextResponse.json({
+        success: true,
+        data: demoGetCategories(),
+      })
+    }
+
     const supabase = await createClient()
 
     const { data: categories, error } = await supabase

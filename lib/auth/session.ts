@@ -13,6 +13,7 @@ export type { AppSession }
 const DEMO_SESSION: AppSession = {
   user_id: 'usr-owner-demo-1111',
   organization_id: '11111111-1111-1111-1111-111111111111',
+  org_id: '11111111-1111-1111-1111-111111111111',
   role: 'owner' as OrgRole,
   user: {
     id: 'usr-owner-demo-1111',
@@ -25,7 +26,7 @@ const DEMO_SESSION: AppSession = {
     name: 'Acme Industrial Systems Pvt Ltd',
     gstin: '27AABCU9603R1ZM',
     logo_url: null,
-    business_category: 'wholesale',
+    business_category: 'General Wholesale',
   },
   member: {
     id: 'mem-demo-owner',
@@ -46,14 +47,15 @@ async function getDemoSession(): Promise<AppSession | null> {
     const demoCookie = cookieStore.get('demo_auth')
     if (demoCookie?.value === 'true') {
       const categoryCookie = cookieStore.get('demo_category')?.value as BusinessCategory | undefined
+      const nameCookie = cookieStore.get('demo_org_name')?.value
       const demoProfile = demoGetOrganizationProfile()
-      const category = (categoryCookie || demoProfile.business_category || 'wholesale') as BusinessCategory
+      const category = (categoryCookie || demoProfile.business_category || 'General Wholesale') as BusinessCategory
 
       return {
         ...DEMO_SESSION,
         organization: {
           ...DEMO_SESSION.organization,
-          name: demoProfile.name || DEMO_SESSION.organization.name,
+          name: nameCookie || demoProfile.name || DEMO_SESSION.organization.name,
           business_category: category,
         },
       }
@@ -70,10 +72,6 @@ async function getDemoSession(): Promise<AppSession | null> {
  * Throws a redirect to /setup if the user has no active organization.
  */
 export async function getServerSession(): Promise<AppSession> {
-  // Check local demo auth cookie fallback first
-  const demo = await getDemoSession()
-  if (demo) return demo
-
   const supabase = await createClient()
 
   const {
@@ -124,6 +122,7 @@ export async function getServerSession(): Promise<AppSession> {
   return {
     user_id: user.id,
     organization_id: org.id,
+    org_id: org.id,
     role: member.role as OrgRole,
     user: {
       id: user.id,
@@ -148,16 +147,8 @@ export async function getServerSession(): Promise<AppSession> {
 
 /**
  * Same as getServerSession but does NOT redirect — returns null instead.
- *
- * IMPORTANT: This checks the demo_auth cookie BEFORE calling getServerSession,
- * because getServerSession calls redirect() which throws a Next.js internal
- * error. That error would be swallowed by the catch block, incorrectly
- * returning null even when a valid demo session exists.
  */
 export async function getServerSessionOptional(): Promise<AppSession | null> {
-  const demo = await getDemoSession()
-  if (demo) return demo
-
   try {
     return await getServerSession()
   } catch {

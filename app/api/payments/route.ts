@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Failed to record payment' },
-      { status: error.message?.includes('Guard') || error.message?.includes('exceed') ? 400 : 500 }
+      { status: error.name === 'ZodError' || error.message?.includes('Guard') || error.message?.includes('exceed') || error.message?.includes('validation') ? 400 : 500 }
     );
   }
 }

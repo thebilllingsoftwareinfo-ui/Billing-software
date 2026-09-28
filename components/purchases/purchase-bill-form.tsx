@@ -227,9 +227,9 @@ export function PurchaseBillForm() {
   async function fetchInitialData() {
     try {
       const [custRes, suppRes, prodRes] = await Promise.all([
-        fetch('/api/customers?limit=200'),
-        fetch('/api/suppliers?limit=200'),
-        fetch('/api/products?limit=200'),
+        fetch('/api/customers?limit=30'),
+        fetch('/api/suppliers?limit=50'),
+        fetch('/api/products?limit=50'),
       ]);
 
       const combinedParties: PartyOption[] = [...DEFAULT_PARTIES];
@@ -740,7 +740,7 @@ export function PurchaseBillForm() {
 
   // Common Form JSX
   const renderFormContent = () => (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 pb-24">
       {/* Party & Bill Metadata Card */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {/* 1. Party Selection (Matching Add Sale & Image 2) */}
@@ -1496,17 +1496,48 @@ export function PurchaseBillForm() {
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-3">
-        <Link href="/purchases/bills">
-          <Button type="button" variant="outline" disabled={loading} className="rounded-xl border-slate-200 text-xs cursor-pointer">
-            Cancel
+      {/* ── PERSISTENT FIXED BOTTOM ACTION BAR WITH LIVE TOTAL ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-300 py-2.5 px-4 sm:px-6 shadow-2xl flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Purchase:</span>
+            <span className="text-xl font-black text-blue-700 font-mono">
+              ₹{grandTotalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+          <div className="flex items-baseline gap-1.5 text-xs">
+            <span className="text-slate-500 font-semibold">Net Payable:</span>
+            <span className="font-mono font-bold text-slate-900">
+              ₹{grandTotalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/purchases/bills">
+            <Button type="button" variant="outline" disabled={loading} className="rounded-xl border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+              Cancel
+            </Button>
+          </Link>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs cursor-pointer"
+          >
+            {loading && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+            Save as Draft
           </Button>
-        </Link>
-        <Button type="submit" disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-semibold shadow-2xs cursor-pointer">
-          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Save Draft Purchase Bill
-        </Button>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+          >
+            {loading && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+            <span>Save Purchase Bill</span>
+          </Button>
+        </div>
       </div>
     </form>
   );

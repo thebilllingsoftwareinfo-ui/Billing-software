@@ -14,12 +14,13 @@ export const invoiceItemSchema = z.object({
   unit: z.string().max(20).optional().or(z.literal('')),
   unit_price: z.number().min(0, 'Unit price cannot be negative'),
   discount_percent: z.number().min(0).max(100).default(0),
+  discount_amount: z.number().min(0).default(0).optional(),
   gst_rate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%'),
   cess_rate: z.number().min(0).max(100).optional(),
   cess_amount: z.number().min(0).optional(),
   tax_treatment: z.string().optional(),
   is_gst_inclusive: z.boolean().default(false),
-  custom_fields: z.record(z.any()).optional().nullable(),
+  custom_fields: z.record(z.string(), z.any()).optional().nullable(),
 })
 
 export const createInvoiceSchema = z.object({
@@ -28,6 +29,8 @@ export const createInvoiceSchema = z.object({
   invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Valid invoice date YYYY-MM-DD required'),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Valid due date YYYY-MM-DD required').optional().or(z.literal('')),
   invoice_type: z.enum(['standard', 'proforma', 'export', 'bill_of_supply']).default('standard'),
+  status: z.enum(['draft', 'issued', 'sent', 'paid', 'partial', 'cancelled', 'void']).optional(),
+  stop_sale_on_negative_stock: z.boolean().optional(),
   place_of_supply: z.string().max(100).optional().or(z.literal('')),
   reverse_charge: z.boolean().default(false),
   reference_number: z.string().max(100).optional().or(z.literal('')),
@@ -40,6 +43,10 @@ export const createInvoiceSchema = z.object({
   notes: z.string().max(2000).optional().or(z.literal('')),
   terms_and_conditions: z.string().max(2000).optional().or(z.literal('')),
   items: z.array(invoiceItemSchema).min(1, 'At least one line item is required'),
+  salesperson_id: z.string().optional().nullable(),
+  custom_commission_rate: z.number().min(0).max(100).optional().nullable(),
+  credit_override_reason: z.string().optional().nullable(),
+  price_list_id: z.string().optional().nullable(),
 })
 
 export const cancelInvoiceSchema = z.object({

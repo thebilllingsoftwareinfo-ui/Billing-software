@@ -59,7 +59,7 @@ async function runTests() {
     VALID_GST_RATES.forEach((rate) => {
       const data = {
         name: 'Test Item',
-        sku: `SKU-${rate}`,
+        sku: `SKU-${String(rate).replace('.', '_')}`,
         selling_price: 100,
         gst_rate: rate,
       }

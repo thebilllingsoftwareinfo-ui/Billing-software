@@ -30,6 +30,7 @@ export default function PaymentOutDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedType, setSelectedType] = useState('all');
 
   // Modal
@@ -37,14 +38,21 @@ export default function PaymentOutDashboardPage() {
   const [viewingPayment, setViewingPayment] = useState<any>(null);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     fetchPayments();
-  }, [search, selectedType]);
+  }, [debouncedSearch, selectedType]);
 
   async function fetchPayments() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (selectedType && selectedType !== 'all') params.append('paymentType', selectedType);
 
       const res = await fetch(`/api/payments-out?${params.toString()}`);

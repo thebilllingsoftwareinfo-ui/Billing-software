@@ -43,6 +43,7 @@ export default function CustomersPage() {
 
   // Filters & Controls state
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [sortBy, setSortBy] = useState('name_asc')
 
@@ -50,6 +51,13 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(query)
+    }, 250)
+    return () => clearTimeout(handler)
+  }, [query])
 
   useEffect(() => {
     if (actionParam === 'new') {
@@ -62,7 +70,7 @@ export default function CustomersPage() {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
-        q: query,
+        q: debouncedQuery,
         status: statusFilter,
         sort: sortBy,
         page: pagination.page.toString(),
@@ -86,7 +94,7 @@ export default function CustomersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [query, statusFilter, sortBy, pagination.page])
+  }, [debouncedQuery, statusFilter, sortBy, pagination.page])
 
   useEffect(() => {
     fetchCustomers()

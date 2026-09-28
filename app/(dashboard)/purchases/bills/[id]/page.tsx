@@ -16,8 +16,11 @@ import {
   Loader2,
   ExternalLink,
   DollarSign,
+  Ban,
+  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DocumentCancellationModal } from '@/components/common/document-cancellation-modal';
 
 export default function PurchaseBillDetailPage({
   params,
@@ -29,6 +32,8 @@ export default function PurchaseBillDetailPage({
 
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [bill, setBill] = useState<any>(null);
 
   useEffect(() => {
@@ -74,16 +79,79 @@ export default function PurchaseBillDetailPage({
     }
   }
 
+  async function handleCancelBill(reason: string) {
+    try {
+      setCancelling(true);
+      const res = await fetch(`/api/purchases/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel bill');
+      }
+      toast.success('Purchase bill cancelled! Stock and payments reversed.');
+      fetchBill();
+    } catch (err: any) {
+      toast.error(err.message || 'Cancellation failed');
+      throw err;
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function handleRecordPayment() {
+    const due = Math.max(0, (bill.total_paise || 0) - (bill.paid_paise || 0));
+    if (due <= 0) {
+      toast.info('This bill is already fully paid!');
+      return;
+    }
+    const dueRupees = due / 100;
+    const amountStr = prompt(`Enter Payment-Out amount for Bill ${bill.bill_number} (Due: ₹${dueRupees.toFixed(2)}):`, String(dueRupees));
+    if (amountStr === null) return;
+    const amt = Number(amountStr);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Invalid payment amount');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/purchases/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplier_id: bill.supplier_id,
+          purchase_bill_id: bill.id,
+          amount: amt,
+          payment_date: new Date().toISOString().split('T')[0],
+          payment_method: 'cash',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to record payment');
+      }
+      toast.success(`Recorded payment of ₹${amt.toFixed(2)} against ${bill.bill_number}!`);
+      fetchBill();
+    } catch (err: any) {
+      toast.error(err.message || 'Payment recording failed');
+    }
+  }
+
   function getStatusBadge(status: string) {
     switch (status) {
       case 'draft':
         return <Badge variant="secondary" className="bg-slate-100 text-slate-700">DRAFT</Badge>;
+      case 'unpaid':
       case 'approved':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">APPROVED / FINALIZED</Badge>;
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">UNPAID</Badge>;
       case 'paid':
         return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">PAID</Badge>;
       case 'partial':
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 font-medium">PARTIAL</Badge>;
+      case 'cancelled':
+      case 'void':
+        return <Badge variant="destructive" className="bg-rose-50 text-rose-700 border-rose-200 font-medium">CANCELLED</Badge>;
       case 'overdue':
         return <Badge variant="destructive">OVERDUE</Badge>;
       default:
@@ -111,7 +179,8 @@ export default function PurchaseBillDetailPage({
     );
   }
 
-  const isFinalized = bill.status !== 'draft';
+  const isCancelled = bill.status === 'cancelled' || bill.status === 'void';
+  const isFinalized = bill.status !== 'draft' && !isCancelled;
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto pb-20">
@@ -138,7 +207,7 @@ export default function PurchaseBillDetailPage({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {!isFinalized && (
+          {!isFinalized && !isCancelled && (
             <Button
               variant="default"
               size="sm"
@@ -155,6 +224,34 @@ export default function PurchaseBillDetailPage({
             </Button>
           )}
 
+          {isFinalized && !isCancelled && bill.status !== 'paid' && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleRecordPayment}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+            >
+              <CreditCard className="w-4 h-4 mr-1.5" /> Record Payment
+            </Button>
+          )}
+
+          {!isCancelled && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCancelModalOpen(true)}
+              disabled={cancelling}
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 font-semibold cursor-pointer"
+            >
+              {cancelling ? (
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <Ban className="w-4 h-4 mr-1.5" />
+              )}
+              Cancel Bill
+            </Button>
+          )}
+
           <Link href={`/purchases/suppliers/${bill.supplier_id}`}>
             <Button variant="outline" size="sm">
               <Truck className="w-4 h-4 mr-1.5 text-indigo-600" /> Supplier Statement
@@ -162,6 +259,19 @@ export default function PurchaseBillDetailPage({
           </Link>
         </div>
       </div>
+
+      {/* Cancelled Banner */}
+      {isCancelled && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 flex items-center gap-3 text-rose-900">
+          <Ban className="w-5 h-5 text-rose-600" />
+          <div>
+            <p className="text-sm font-semibold">Purchase Bill Cancelled</p>
+            <p className="text-xs text-rose-700">
+              This purchase bill was cancelled. Stock additions were reversed, and supplier payable and cash/bank payments were cleared.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Finalized Banner */}
       {isFinalized && (
@@ -295,6 +405,18 @@ export default function PurchaseBillDetailPage({
           </div>
         </div>
       </div>
+
+      {bill && (
+        <DocumentCancellationModal
+          open={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          onConfirm={handleCancelBill}
+          documentType="Purchase Bill"
+          documentNumber={bill.bill_number}
+          partyName={bill.supplier?.name || bill.supplier_name || 'Supplier'}
+          amount={bill.total_amount || (bill.total_paise ? bill.total_paise / 100 : 0)}
+        />
+      )}
     </div>
   );
 }

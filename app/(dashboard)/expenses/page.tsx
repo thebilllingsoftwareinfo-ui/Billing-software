@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,9 +23,12 @@ import {
   Copy,
   Printer,
   Trash2,
+  Ban,
+  Eye,
 } from 'lucide-react';
 import { ExpenseFormModal } from '@/components/expenses/expense-form-modal';
 import { ManageCategoriesModal } from '@/components/expenses/manage-categories-modal';
+import { ExpenseDetailsModal } from '@/components/expenses/expense-details-modal';
 import { RowActionsMenu } from '@/components/common/row-actions-menu';
 import { toast } from 'sonner';
 
@@ -41,6 +44,7 @@ export default function ExpensesDirectoryPage() {
   // Filters
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [paymentMethod, setPaymentMethod] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
@@ -49,8 +53,16 @@ export default function ExpensesDirectoryPage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [expenseToEdit, setExpenseToEdit] = useState<any>(null);
+  const [viewingExpense, setViewingExpense] = useState<any>(null);
 
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
@@ -58,9 +70,25 @@ export default function ExpensesDirectoryPage() {
     }
   }, [searchParams]);
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const catRes = await fetch('/api/expenses/categories');
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        setCategories(catData.categories || []);
+      }
+    } catch {
+      // ignore non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
   useEffect(() => {
     fetchInitialData();
-  }, [page, search, selectedCategory, paymentMethod, showArchived]);
+  }, [page, debouncedSearch, selectedCategory, paymentMethod, showArchived]);
 
   async function fetchInitialData() {
     try {
@@ -69,14 +97,13 @@ export default function ExpensesDirectoryPage() {
         page: page.toString(),
         limit: '15',
       });
-      if (search) params.append('search', search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (selectedCategory && selectedCategory !== 'all') params.append('categoryId', selectedCategory);
       if (paymentMethod && paymentMethod !== 'all') params.append('paymentMethod', paymentMethod);
       if (showArchived) params.append('archived', 'true');
 
-      const [expRes, catRes, sumRes] = await Promise.all([
+      const [expRes, sumRes] = await Promise.all([
         fetch(`/api/expenses?${params.toString()}`),
-        fetch('/api/expenses/categories'),
         fetch('/api/expenses/summary'),
       ]);
 
@@ -84,11 +111,6 @@ export default function ExpensesDirectoryPage() {
         const data = await expRes.json();
         setExpenses(data.expenses || []);
         setTotalCount(data.total || 0);
-      }
-
-      if (catRes.ok) {
-        const catData = await catRes.json();
-        setCategories(catData.categories || []);
       }
 
       if (sumRes.ok) {
@@ -138,10 +160,25 @@ export default function ExpensesDirectoryPage() {
     toast.success('Expense voucher duplicated!');
   }
 
-  function handleDeleteExpense(expense: any) {
-    if (!confirm(`Are you sure you want to delete expense record for ${expense.vendor_name || 'this item'}?`)) return;
-    setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
-    toast.success('Expense record deleted');
+  async function handleCancelExpense(expense: any) {
+    const reason = prompt(`Enter cancellation reason for expense voucher #${expense.reference_number || expense.id.slice(0, 8)}:`);
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const res = await fetch(`/api/expenses/${expense.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel expense');
+      }
+      toast.success('Expense cancelled and financial ledgers reversed');
+      fetchInitialData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel expense');
+    }
   }
 
   function handlePrintExpense(expense: any) {
@@ -380,6 +417,14 @@ export default function ExpensesDirectoryPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => setViewingExpense(e)}
+                          title="View Details & Ledger Impacts"
+                        >
+                          <Eye className="w-4 h-4 text-indigo-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleEditClick(e)}
                           title="Edit Expense"
                         >
@@ -387,6 +432,11 @@ export default function ExpensesDirectoryPage() {
                         </Button>
                         <RowActionsMenu
                           items={[
+                            {
+                              label: 'View Details & Ledger Impacts',
+                              icon: Eye,
+                              onClick: () => setViewingExpense(e),
+                            },
                             {
                               label: 'Edit Expense',
                               icon: Pencil,
@@ -418,9 +468,9 @@ export default function ExpensesDirectoryPage() {
                               onClick: () => handleArchiveToggle(e),
                             },
                             {
-                              label: 'Delete Expense',
-                              icon: Trash2,
-                              onClick: () => handleDeleteExpense(e),
+                              label: 'Cancel & Reverse Expense',
+                              icon: Ban,
+                              onClick: () => handleCancelExpense(e),
                               isDestructive: true,
                             },
                           ]}
@@ -447,7 +497,18 @@ export default function ExpensesDirectoryPage() {
       <ManageCategoriesModal
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
-        onSuccess={() => fetchInitialData()}
+        onSuccess={() => {
+          fetchInitialData();
+          fetchCategories();
+        }}
+      />
+
+      {/* View Expense Details & Impacts Modal */}
+      <ExpenseDetailsModal
+        isOpen={Boolean(viewingExpense)}
+        expense={viewingExpense}
+        onClose={() => setViewingExpense(null)}
+        onCancelled={() => fetchInitialData()}
       />
     </div>
   );

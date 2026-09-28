@@ -8,6 +8,9 @@ import {
   demoGetPaymentDetails,
   demoAddPayment,
 } from '@/lib/services/demo-store';
+import { CashBankService } from '@/lib/services/cash-bank.service';
+import { AccountingService } from '@/lib/services/accounting.service';
+import { FinancialPeriodService } from '@/lib/services/financial-period.service';
 
 export interface PaymentListFilters {
   page?: number;
@@ -32,12 +35,25 @@ export class PaymentService {
     requirePermission(role, 'payments.create');
 
     const validatedPayload = createPaymentSchema.parse(payload);
+    await FinancialPeriodService.validatePostingDate(session, validatedPayload.payment_date);
 
     if (userId.includes('demo')) {
       const demoRes = demoAddPayment({
         ...validatedPayload,
         organization_id: orgId,
       });
+      try {
+        await AccountingService.postCustomerPaymentAccounting(session, {
+          id: demoRes.id,
+          payment_date: validatedPayload.payment_date,
+          amount: validatedPayload.amount,
+          payment_method: validatedPayload.payment_method,
+          customer_name: 'Customer',
+          reference_number: validatedPayload.reference_number || undefined,
+        });
+      } catch (accErr: any) {
+        console.warn('[PaymentService] Accounting posting notice (demo):', accErr?.message);
+      }
       return {
         payment_id: demoRes.id,
         amount: validatedPayload.amount,
@@ -58,22 +74,24 @@ export class PaymentService {
 
     const customer = rawCustomer as any;
     if (customerErr || !customer) {
-      // Fallback for demo
-      const demoRes = demoAddPayment({
-        ...validatedPayload,
-        organization_id: orgId,
-      });
-      return {
-        payment_id: demoRes.id,
-        amount: validatedPayload.amount,
-        allocated_invoices: demoRes.allocations,
-        created_at: demoRes.created_at,
-      };
+      if (userId.includes('demo')) {
+        const demoRes = demoAddPayment({
+          ...validatedPayload,
+          organization_id: orgId,
+        });
+        return {
+          payment_id: demoRes.id,
+          amount: validatedPayload.amount,
+          allocated_invoices: demoRes.allocations,
+          created_at: demoRes.created_at,
+        };
+      }
+      throw new Error('Customer not found or unauthorized');
     }
 
     // 2. Total allocated validation
     const totalAllocatedPaise = validatedPayload.allocations.reduce(
-      (sum, item) => sum + item.allocated,
+      (sum, item) => sum + item.allocated_amount,
       0
     );
 
@@ -87,7 +105,7 @@ export class PaymentService {
     const invoiceIds = validatedPayload.allocations.map((a) => a.invoice_id);
     const { data: rawInvoices, error: invoicesErr } = await supabase
       .from('invoices')
-      .select('id, invoice_number, total, paid, status, customer_id')
+      .select('id, invoice_number, total, total_amount, paid, amount_paid, status, payment_status, customer_id')
       .in('id', invoiceIds)
       .eq('organization_id', orgId);
 
@@ -102,6 +120,7 @@ export class PaymentService {
       invoice_number: string;
       new_paid: number;
       new_status: string;
+      invoice_total: number;
       allocated: number;
     }> = [];
 
@@ -115,23 +134,23 @@ export class PaymentService {
         throw new Error(`Invoice ${inv.invoice_number} does not belong to selected customer`);
       }
 
-      const currentPaid = Number(inv.paid || 0);
-      const invoiceTotal = Number(inv.total || 0);
+      const currentPaid = Number(inv.amount_paid ?? inv.paid ?? 0);
+      const invoiceTotal = Number(inv.total_amount ?? inv.total ?? 0);
       const currentOutstanding = Math.max(0, invoiceTotal - currentPaid);
 
-      if (allocation.allocated > currentOutstanding && !validatedPayload.allow_overpayment) {
+      if (allocation.allocated_amount > currentOutstanding && !validatedPayload.allow_overpayment) {
         throw new Error(
-          `Overpayment Guard: Allocated payment ₹${(allocation.allocated ).toFixed(2)} exceeds invoice ${inv.invoice_number} outstanding balance ₹${(currentOutstanding ).toFixed(2)}. Enable explicit overpayment policy to override.`
+          `Overpayment Guard: Allocated payment ₹${(allocation.allocated_amount ).toFixed(2)} exceeds invoice ${inv.invoice_number} outstanding balance ₹${(currentOutstanding ).toFixed(2)}. Enable explicit overpayment policy to override.`
         );
       }
 
-      const newPaidPaise = currentPaid + allocation.allocated;
+      const newPaid = currentPaid + allocation.allocated_amount;
       
       // Calculate auto status transition
       let newStatus = inv.status;
-      if (newPaidPaise >= invoiceTotal) {
+      if (newPaid >= invoiceTotal) {
         newStatus = 'paid';
-      } else if (newPaidPaise > 0) {
+      } else if (newPaid > 0) {
         newStatus = 'partial';
       } else {
         newStatus = 'sent';
@@ -140,9 +159,10 @@ export class PaymentService {
       invoiceUpdates.push({
         id: inv.id,
         invoice_number: inv.invoice_number,
-        new_paid: newPaidPaise,
+        new_paid: newPaid,
         new_status: newStatus,
-        allocated: allocation.allocated,
+        invoice_total: invoiceTotal,
+        allocated: allocation.allocated_amount,
       });
     }
 
@@ -182,12 +202,16 @@ export class PaymentService {
       throw new Error(`Failed to insert payment allocations: ${allocInsertErr.message}`);
     }
 
-    // 6. Update target invoices (paid & status)
+    // 6. Update target invoices (both canonical and compatibility fields)
     for (const update of invoiceUpdates) {
+      const balanceDue = Math.max(0, update.invoice_total - update.new_paid);
       const { error: updateInvErr } = await (supabase.from('invoices') as any)
         .update({
           paid: update.new_paid,
+          amount_paid: update.new_paid,
+          balance_due: balanceDue,
           status: update.new_status,
+          payment_status: update.new_status,
           updated_at: new Date().toISOString(),
         })
         .eq('id', update.id)
@@ -198,10 +222,59 @@ export class PaymentService {
       }
     }
 
-    // 7. Recalculate and sync customer outstanding balance
+    // 7. Record into customer_transactions ledger
+    try {
+      await (supabase.from('customer_transactions') as any).insert({
+        organization_id: orgId,
+        customer_id: validatedPayload.customer_id,
+        transaction_type: 'payment',
+        reference_type: 'payment',
+        reference_id: paymentRecord.id,
+        reference_number: validatedPayload.reference_number || paymentRecord.id,
+        amount: -Number(validatedPayload.amount), // payment reduces customer balance
+        transaction_date: validatedPayload.payment_date,
+        narration: validatedPayload.notes || `Payment received via ${(validatedPayload.payment_method || 'Cash').toUpperCase()}`,
+        created_by: userId,
+      });
+    } catch {
+      // Table might not exist or optional in some setups
+    }
+
+    // 7b. Post to Cash/Bank Financial Ledger
+    try {
+      await CashBankService.recordTransaction(session, {
+        direction: 'in',
+        amount: validatedPayload.amount,
+        transaction_type: 'payment_in',
+        transaction_date: validatedPayload.payment_date,
+        payment_mode: validatedPayload.payment_method,
+        reference_type: 'payment',
+        reference_id: paymentRecord.id,
+        reference_number: validatedPayload.reference_number || paymentRecord.id,
+        narration: `Customer payment received for ${customer.name || 'Customer'} via ${(validatedPayload.payment_method || 'Cash').toUpperCase()}`,
+      });
+    } catch (cbErr: any) {
+      console.warn('[PaymentService] Cash/Bank recording notice:', cbErr.message);
+    }
+
+    // 7c. Post to Double-Entry Accounting
+    try {
+      await AccountingService.postCustomerPaymentAccounting(session, {
+        id: paymentRecord.id,
+        payment_date: validatedPayload.payment_date,
+        amount: validatedPayload.amount,
+        payment_method: validatedPayload.payment_method,
+        customer_name: customer.name || 'Customer',
+        reference_number: validatedPayload.reference_number || undefined,
+      });
+    } catch (accErr: any) {
+      console.warn('[PaymentService] Accounting posting notice (prod):', accErr?.message);
+    }
+
+    // 8. Recalculate and sync customer outstanding balance
     await this.syncCustomerOutstanding(orgId, validatedPayload.customer_id);
 
-    // 8. Audit trail log
+    // 9. Audit trail log
     await logAudit(session, 'payment.created', 'payments', paymentRecord.id, {
       customer_id: validatedPayload.customer_id,
       customer_name: customer.name,
@@ -227,27 +300,29 @@ export class PaymentService {
 
     const { data: rawUnpaidInvoices } = await supabase
       .from('invoices')
-      .select('total, paid')
+      .select('total, paid, total_amount, paid_amount')
       .eq('organization_id', organizationId)
       .eq('customer_id', customerId)
       .not('status', 'in', '("draft","void","cancelled")');
 
     const unpaidInvoices = (rawUnpaidInvoices || []) as any[];
-    const totalOutstandingPaise = unpaidInvoices.reduce((sum, inv) => {
-      const total = Number(inv.total || 0);
-      const paid = Number(inv.paid || 0);
+    const totalOutstanding = unpaidInvoices.reduce((sum, inv) => {
+      const total = Number(inv.total_amount ?? inv.total ?? 0);
+      const paid = Number(inv.paid_amount ?? inv.paid ?? 0);
       return sum + Math.max(0, total - paid);
     }, 0);
 
     await (supabase.from('customers') as any)
       .update({
-        outstanding: totalOutstandingPaise,
+        outstanding_balance: totalOutstanding,
+        outstanding: Math.round(totalOutstanding * 100),
+        outstanding_paise: Math.round(totalOutstanding * 100),
         updated_at: new Date().toISOString(),
       })
       .eq('id', customerId)
       .eq('organization_id', organizationId);
 
-    return totalOutstandingPaise;
+    return totalOutstanding;
   }
 
   /**

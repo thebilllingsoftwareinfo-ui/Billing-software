@@ -13,12 +13,22 @@ export async function POST(
     }
 
     const { id } = await params;
-    const result = await QuotationService.convertQuotationToInvoice(session, id);
+    const body = await req.json().catch(() => ({}));
+    const target = body?.target || 'invoice';
+
+    let result;
+    if (target === 'sales_order') {
+      result = await QuotationService.convertQuotationToSalesOrder(session, id);
+    } else if (target === 'proforma' || target === 'proforma_invoice') {
+      result = await QuotationService.convertQuotationToProforma(session, id);
+    } else {
+      result = await QuotationService.convertQuotationToInvoice(session, id);
+    }
 
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to convert quotation to invoice' },
+      { error: error.message || 'Failed to convert quotation' },
       { status: 400 }
     );
   }

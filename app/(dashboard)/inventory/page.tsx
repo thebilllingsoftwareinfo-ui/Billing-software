@@ -19,6 +19,12 @@ import {
   Eye,
   ShoppingCart,
   FileText,
+  RotateCcw,
+  Layers,
+  Warehouse,
+  ArrowRightLeft,
+  Bookmark,
+  ClipboardCheck,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/empty-state'
 import { StockAdjustmentModal } from '@/components/inventory/stock-adjustment-modal'
@@ -32,6 +38,7 @@ interface ProductInventory {
   sku: string | null
   barcode: string | null
   current_stock: number
+  reorder_level?: number | null
   min_stock_level: number
   purchase_price: number
   sale_price: number
@@ -58,7 +65,8 @@ export default function StockInventoryPage() {
   })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out'>('all')
 
   // Modals state
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false)
@@ -66,11 +74,18 @@ export default function StockInventoryPage() {
   const [selectedProductForAdj, setSelectedProductForAdj] = useState<string | undefined>(undefined)
   const [selectedProductForHistory, setSelectedProductForHistory] = useState<{ id: string; name: string; sku?: string } | null>(null)
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const fetchInventory = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (search) params.set('q', search)
+      if (debouncedSearch) params.set('q', debouncedSearch)
       params.set('limit', '100')
 
       const res = await fetch(`/api/inventory?${params.toString()}`)
@@ -90,7 +105,7 @@ export default function StockInventoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [debouncedSearch])
 
   useEffect(() => {
     fetchInventory()
@@ -98,10 +113,15 @@ export default function StockInventoryPage() {
 
   const filteredItems = items.filter((item) => {
     const stock = Number(item.current_stock) || 0
-    const minLevel = Number(item.min_stock_level) || 0
+    const threshold = item.reorder_level !== undefined && item.reorder_level !== null
+      ? Number(item.reorder_level)
+      : (Number(item.min_stock_level) || 0)
 
+    if (stockFilter === 'in') {
+      return stock > threshold
+    }
     if (stockFilter === 'low') {
-      return stock <= minLevel && stock > 0
+      return stock <= threshold && stock > 0
     }
     if (stockFilter === 'out') {
       return stock <= 0
@@ -133,21 +153,85 @@ export default function StockInventoryPage() {
             Immutable movement-driven stock tracking, low-stock detection, and valuation calculations.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => fetchInventory()}
-            className="p-2.5 text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors shadow-2xs"
+            className="p-2.5 text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors shadow-2xs cursor-pointer"
             title="Refresh Inventory"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
+            onClick={() => router.push('/inventory/returns')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-xl border border-rose-200 transition-colors cursor-pointer"
+          >
+            <RotateCcw className="h-4 w-4" /> Returns
+          </button>
+          <button
+            onClick={() => router.push('/reports/stock')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-xl shadow-2xs transition-colors cursor-pointer"
+          >
+            <FileText className="h-4 w-4" /> Stock Reports
+          </button>
+          <button
+            onClick={() => router.push('/inventory/opening')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            Opening Stock
+          </button>
+          <button
             onClick={() => handleOpenAdjustment()}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="h-4 w-4" /> Stock Adjustment
           </button>
         </div>
+      </div>
+
+      {/* Phase 8 Warehouse & Advanced Operations Quick-Links */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-medium">
+        <button
+          onClick={() => router.push('/inventory/warehouses')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <Warehouse className="h-3.5 w-3.5 text-blue-600" /> Warehouses & Godowns
+        </button>
+        <button
+          onClick={() => router.push('/inventory/transfers')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-600" /> Stock Transfers
+        </button>
+        <button
+          onClick={() => router.push('/inventory/batches')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <Layers className="h-3.5 w-3.5 text-amber-600" /> Batches & Expiry
+        </button>
+        <button
+          onClick={() => router.push('/inventory/serials')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <Package className="h-3.5 w-3.5 text-teal-600" /> Serial Numbers
+        </button>
+        <button
+          onClick={() => router.push('/inventory/reservations')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <Bookmark className="h-3.5 w-3.5 text-purple-600" /> Reservations
+        </button>
+        <button
+          onClick={() => router.push('/inventory/stock-counts')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" /> Stock Counts
+        </button>
+        <button
+          onClick={() => router.push('/inventory/valuation')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-700 rounded-xl shadow-2xs transition-all whitespace-nowrap cursor-pointer"
+        >
+          <DollarSign className="h-3.5 w-3.5 text-emerald-600" /> Stock Valuation
+        </button>
       </div>
 
       {/* Valuation & KPI Summary Cards */}
@@ -234,6 +318,14 @@ export default function StockInventoryPage() {
               All Stock
             </button>
             <button
+              onClick={() => setStockFilter('in')}
+              className={`px-3 py-1 rounded-lg transition-all ${
+                stockFilter === 'in' ? 'bg-white text-emerald-700 shadow-2xs font-semibold' : 'hover:text-gray-900'
+              }`}
+            >
+              In Stock
+            </button>
+            <button
               onClick={() => setStockFilter('low')}
               className={`px-3 py-1 rounded-lg transition-all ${
                 stockFilter === 'low' ? 'bg-white text-amber-700 shadow-2xs font-semibold' : 'hover:text-gray-900'
@@ -277,7 +369,7 @@ export default function StockInventoryPage() {
                   <th className="py-3.5 px-4">SKU / Code</th>
                   <th className="py-3.5 px-4 text-right">Current Stock</th>
                   <th className="py-3.5 px-4 text-right">Reorder Level</th>
-                  <th className="py-3.5 px-4">Stock Status</th>
+                  <th className="py-3.5 px-4 text-center">Stock Status</th>
                   <th className="py-3.5 px-4 text-right">Cost Price</th>
                   <th className="py-3.5 px-4 text-right">Stock Valuation</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -286,26 +378,28 @@ export default function StockInventoryPage() {
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {filteredItems.map((item) => {
                   const stock = Number(item.current_stock) || 0
-                  const minLevel = Number(item.min_stock_level) || 0
+                  const reorder = item.reorder_level !== undefined && item.reorder_level !== null
+                    ? Number(item.reorder_level)
+                    : (Number(item.min_stock_level) || 0)
                   const cost = Number(item.purchase_price) || 0
                   const valuation = stock * cost
                   const unitAbbr = item.product_units?.abbreviation || 'units'
 
                   let statusBadge = (
-                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg text-[11px]">
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg text-[11px] border border-emerald-200">
                       In Stock
                     </span>
                   )
 
                   if (stock <= 0) {
                     statusBadge = (
-                      <span className="px-2.5 py-1 bg-rose-50 text-rose-700 font-semibold rounded-lg text-[11px]">
+                      <span className="px-2.5 py-1 bg-rose-50 text-rose-700 font-semibold rounded-lg text-[11px] border border-rose-200">
                         Out of Stock
                       </span>
                     )
-                  } else if (stock <= minLevel) {
+                  } else if (stock <= reorder) {
                     statusBadge = (
-                      <span className="px-2.5 py-1 bg-amber-50 text-amber-700 font-semibold rounded-lg text-[11px]">
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-700 font-semibold rounded-lg text-[11px] border border-amber-200">
                         Low Stock
                       </span>
                     )
@@ -328,9 +422,9 @@ export default function StockInventoryPage() {
                         {stock} <span className="text-gray-400 font-normal text-[11px]">{unitAbbr}</span>
                       </td>
                       <td className="py-3.5 px-4 text-right text-gray-500 font-medium">
-                        {minLevel} <span className="text-gray-400 font-normal text-[11px]">{unitAbbr}</span>
+                        {reorder} <span className="text-gray-400 font-normal text-[11px]">{unitAbbr}</span>
                       </td>
-                      <td className="py-3.5 px-4">{statusBadge}</td>
+                      <td className="py-3.5 px-4 text-center">{statusBadge}</td>
                       <td className="py-3.5 px-4 text-right text-gray-600 font-mono text-[11px]">
                         ₹{cost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
@@ -340,9 +434,9 @@ export default function StockInventoryPage() {
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1">
                           <button
-                            onClick={() => handleOpenHistory(item)}
+                            onClick={() => router.push(`/inventory/product/${item.id}/ledger`)}
                             className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                            title="View Stock Ledger History"
+                            title="Open Stock Ledger Page"
                           >
                             <History className="h-4 w-4" />
                           </button>
@@ -356,8 +450,13 @@ export default function StockInventoryPage() {
                           <RowActionsMenu
                             items={[
                               {
-                                label: 'Stock Movement History',
+                                label: 'Product Stock Ledger',
                                 icon: History,
+                                onClick: () => router.push(`/inventory/product/${item.id}/ledger`),
+                              },
+                              {
+                                label: 'Stock Movement History (Modal)',
+                                icon: Layers,
                                 onClick: () => handleOpenHistory(item),
                               },
                               {

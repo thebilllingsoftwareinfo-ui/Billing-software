@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Loader2, Phone, Mail, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { loginDemo } from './actions'
 
 
 type IdentifierType = 'phone' | 'email'
@@ -427,17 +426,6 @@ export default function LoginPage() {
             </button>
           </form>
         )}
-      </div>
-
-      <div className="pt-2">
-        <form action={loginDemo}>
-          <button
-            type="submit"
-            className="w-full h-10 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-          >
-            1-Click Demo Login
-          </button>
-        </form>
       </div>
 
       <div className="pt-2 text-center text-xs text-gray-500">

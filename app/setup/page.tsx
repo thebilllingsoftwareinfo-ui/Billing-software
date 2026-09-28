@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Loader2, Building2, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, FileText, Receipt, Tag } from 'lucide-react'
-import { organizationSetupSchema, BUSINESS_CATEGORIES } from '@/lib/validators/organization.schema'
+import { organizationSetupSchema, BUSINESS_STRUCTURE } from '@/lib/validators/organization.schema'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 
@@ -66,20 +66,22 @@ export default function SetupPage() {
   } = useForm<OrganizationSetupFormValues>({
     resolver: zodResolver(organizationSetupSchema),
     defaultValues: {
-      business_category: undefined,
+      business_type: '',
+      business_category: '',
       name: '',
       invoice_prefix: 'INV',
       financial_year_start: '04-01',
     },
   })
 
+  const selectedType = watch('business_type')
   const selectedCategory = watch('business_category')
   const gstin = watch('gstin', '')
 
   const handleNextStep = async () => {
     let isValid = false
     if (currentStep === 1) {
-      isValid = await trigger(['business_category'])
+      isValid = await trigger(['business_type', 'business_category'])
     } else if (currentStep === 2) {
       isValid = await trigger(['name'])
     } else if (currentStep === 3) {
@@ -206,44 +208,60 @@ export default function SetupPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {BUSINESS_CATEGORIES.map((cat) => {
-                    const isSelected = selectedCategory === cat.value
-                    return (
-                      <button
-                        key={cat.value}
-                        type="button"
-                        onClick={() => setValue('business_category', cat.value as OrganizationSetupFormValues['business_category'], { shouldValidate: true })}
-                        className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all cursor-pointer group ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-600/20 shadow-lg shadow-indigo-500/10'
-                            : 'border-slate-700 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-800/60'
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Business Type <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      {...register('business_type')}
+                      onChange={(e) => {
+                        setValue('business_type', e.target.value, { shouldValidate: true })
+                        setValue('business_category', '', { shouldValidate: true })
+                      }}
+                      className={`w-full h-11 px-4 text-sm rounded-xl border bg-slate-950 text-white placeholder:text-slate-500
+                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                          errors.business_type ? 'border-red-500' : 'border-slate-800'
                         }`}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                            <CheckCircle2 className="h-3 w-3 text-white" />
-                          </div>
-                        )}
-                        <span className="text-2xl">{cat.emoji}</span>
-                        <span className={`text-xs font-bold leading-tight ${isSelected ? 'text-indigo-300' : 'text-slate-200'}`}>
-                          {cat.label}
-                        </span>
-                        <span className="text-[10px] text-slate-500 leading-tight hidden sm:block">{cat.description}</span>
-                      </button>
-                    )
-                  })}
+                    >
+                      <option value="">Select Business Type</option>
+                      {Object.keys(BUSINESS_STRUCTURE).map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.business_type && <p className="text-xs text-red-400">{errors.business_type.message}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Business Category <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      {...register('business_category')}
+                      className={`w-full h-11 px-4 text-sm rounded-xl border bg-slate-950 text-white placeholder:text-slate-500
+                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                          errors.business_category ? 'border-red-500' : 'border-slate-800'
+                        }`}
+                      disabled={!selectedType}
+                    >
+                      <option value="">Select Business Category</option>
+                      {selectedType && BUSINESS_STRUCTURE[selectedType]?.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.business_category && <p className="text-xs text-red-400">{errors.business_category.message}</p>}
+                  </div>
                 </div>
 
-                {errors.business_category && (
-                  <p className="text-xs text-red-400">{errors.business_category.message}</p>
-                )}
-
-                {selectedCategory && (
-                  <div className="flex items-center gap-2 bg-indigo-950/50 border border-indigo-800/50 rounded-xl px-4 py-2.5 text-xs text-indigo-300">
-                    <span className="text-base">{BUSINESS_CATEGORIES.find(c => c.value === selectedCategory)?.emoji}</span>
+                {selectedType && selectedCategory && (
+                  <div className="flex items-center gap-2 bg-indigo-950/50 border border-indigo-800/50 rounded-xl px-4 py-2.5 text-xs text-indigo-300 mt-4">
+                    <CheckCircle2 className="h-4 w-4" />
                     <span>
-                      <strong>{BUSINESS_CATEGORIES.find(c => c.value === selectedCategory)?.label}</strong> selected —
+                      <strong>{selectedCategory}</strong> selected —
                       your dashboard will be customised for this business type.
                     </span>
                   </div>

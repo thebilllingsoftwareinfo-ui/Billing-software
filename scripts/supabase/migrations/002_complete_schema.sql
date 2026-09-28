@@ -36,38 +36,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- RLS helper: returns set of org IDs the current user is an active member of
-CREATE OR REPLACE FUNCTION get_my_org_ids()
-RETURNS SETOF UUID AS $$
-  SELECT organization_id
-  FROM organization_members
-  WHERE user_id = auth.uid()
-    AND status = 'active'
-$$ LANGUAGE SQL SECURITY DEFINER STABLE;
-
--- RLS helper: returns the user's role in a specific organization
-CREATE OR REPLACE FUNCTION get_my_role_in_org(org_id UUID)
-RETURNS TEXT AS $$
-  SELECT role
-  FROM organization_members
-  WHERE user_id = auth.uid()
-    AND organization_id = org_id
-    AND status = 'active'
-  LIMIT 1
-$$ LANGUAGE SQL SECURITY DEFINER STABLE;
-
--- RLS helper: checks if current user is owner or admin in an org
-CREATE OR REPLACE FUNCTION is_org_admin(org_id UUID)
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM organization_members
-    WHERE user_id = auth.uid()
-      AND organization_id = org_id
-      AND role IN ('owner', 'admin')
-      AND status = 'active'
-  )
-$$ LANGUAGE SQL SECURITY DEFINER STABLE;
-
 -- ============================================================
 -- SECTION 1: TENANCY & USER MANAGEMENT
 -- ============================================================
@@ -722,7 +690,7 @@ CREATE TABLE invoices (
   reverse_charge        BOOLEAN NOT NULL DEFAULT FALSE,
   -- References
   reference_number      TEXT,                              -- Customer's PO number
-  quotation_id          UUID REFERENCES quotations(id) ON DELETE SET NULL,
+  quotation_id          UUID,                              -- FK added after quotations table
   -- Currency
   currency              TEXT NOT NULL DEFAULT 'INR',
   exchange_rate         NUMERIC(10,6) NOT NULL DEFAULT 1,
@@ -864,24 +832,6 @@ COMMENT ON TABLE invoice_taxes IS
   'GST breakdown by HSN/SAC code and rate. Populated at invoice finalization. '
   'Used directly for GSTR-1 preparation.';
 
--- ------------------------------------------------------------
--- TABLE: invoice_payments
--- Allocation bridge between payments and invoices.
--- One payment can be spread across multiple invoices and vice versa.
--- ------------------------------------------------------------
-CREATE TABLE invoice_payments (
-  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  invoice_id          UUID NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
-  payment_id          UUID NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
-  amount_allocated    NUMERIC(15,2) NOT NULL CHECK (amount_allocated > 0),
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (invoice_id, payment_id)
-);
-
-CREATE INDEX idx_invoice_payments_invoice ON invoice_payments(invoice_id);
-CREATE INDEX idx_invoice_payments_payment ON invoice_payments(payment_id);
-
 -- ============================================================
 -- SECTION 7: QUOTATIONS
 -- ============================================================
@@ -926,6 +876,11 @@ CREATE INDEX idx_quotations_customer ON quotations(customer_id);
 CREATE TRIGGER quotations_updated_at
   BEFORE UPDATE ON quotations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Foreign key link from invoices to quotations (resolving circular dependency)
+ALTER TABLE invoices
+  ADD CONSTRAINT fk_invoices_quotation
+  FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL;
 
 CREATE TABLE quotation_items (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1088,6 +1043,24 @@ CREATE TRIGGER payments_updated_at
 COMMENT ON COLUMN payments.party_id IS
   'Polymorphic FK: points to customers.id when party_type=customer, '
   'suppliers.id when party_type=supplier. Enforced at application level.';
+
+-- ------------------------------------------------------------
+-- TABLE: invoice_payments
+-- Allocation bridge between payments and invoices.
+-- One payment can be spread across multiple invoices and vice versa.
+-- ------------------------------------------------------------
+CREATE TABLE invoice_payments (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_id          UUID NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+  payment_id          UUID NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
+  amount_allocated    NUMERIC(15,2) NOT NULL CHECK (amount_allocated > 0),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (invoice_id, payment_id)
+);
+
+CREATE INDEX idx_invoice_payments_invoice ON invoice_payments(invoice_id);
+CREATE INDEX idx_invoice_payments_payment ON invoice_payments(payment_id);
 
 -- ============================================================
 -- SECTION 10: EXPENSES
@@ -1437,6 +1410,38 @@ CREATE TRIGGER subscriptions_updated_at
 -- ============================================================
 -- SECTION 16: ROW LEVEL SECURITY
 -- ============================================================
+
+-- RLS helper: returns set of org IDs the current user is an active member of
+CREATE OR REPLACE FUNCTION get_my_org_ids()
+RETURNS SETOF UUID AS $$
+  SELECT organization_id
+  FROM organization_members
+  WHERE user_id = auth.uid()
+    AND status = 'active'
+$$ LANGUAGE SQL SECURITY DEFINER STABLE;
+
+-- RLS helper: returns the user's role in a specific organization
+CREATE OR REPLACE FUNCTION get_my_role_in_org(org_id UUID)
+RETURNS TEXT AS $$
+  SELECT role
+  FROM organization_members
+  WHERE user_id = auth.uid()
+    AND organization_id = org_id
+    AND status = 'active'
+  LIMIT 1
+$$ LANGUAGE SQL SECURITY DEFINER STABLE;
+
+-- RLS helper: checks if current user is owner or admin in an org
+CREATE OR REPLACE FUNCTION is_org_admin(org_id UUID)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM organization_members
+    WHERE user_id = auth.uid()
+      AND organization_id = org_id
+      AND role IN ('owner', 'admin')
+      AND status = 'active'
+  )
+$$ LANGUAGE SQL SECURITY DEFINER STABLE;
 
 -- Enable RLS on all tables
 ALTER TABLE user_profiles            ENABLE ROW LEVEL SECURITY;

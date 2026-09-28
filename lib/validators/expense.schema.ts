@@ -7,11 +7,13 @@ export const createExpenseCategorySchema = z.object({
 
 export type CreateExpenseCategoryInput = z.infer<typeof createExpenseCategorySchema>;
 
-export const createExpenseSchema = z.object({
+export const baseExpenseSchema = z.object({
   category_id: z.string().min(1, 'Category is required'),
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expense date must be YYYY-MM-DD'),
-  amount_paise: z.number().int('Amount must be in paise').positive('Amount must be greater than zero'),
-  gst_paise: z.number().int().nonnegative().default(0),
+  amount: z.number().positive('Amount must be greater than zero').optional(),
+  amount_paise: z.number().positive('Amount must be greater than zero').optional(),
+  gst_amount: z.number().nonnegative().optional(),
+  gst_paise: z.number().nonnegative().optional(),
   vendor_name: z.string().optional().nullable(),
   description: z.string().optional().nullable(), // Notes / description
   payment_method: z.string().default('cash'),
@@ -21,6 +23,27 @@ export const createExpenseSchema = z.object({
   expense_number: z.string().optional(),
 });
 
-export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+export const createExpenseSchema = baseExpenseSchema.transform((val) => {
+  const amt = val.amount ?? (val.amount_paise !== undefined ? val.amount_paise / 100 : 0);
+  const gst = val.gst_amount ?? (val.gst_paise !== undefined ? val.gst_paise / 100 : 0);
+  return {
+    ...val,
+    amount: amt,
+    amount_paise: Math.round(amt * 100),
+    gst_amount: gst,
+    gst_paise: Math.round(gst * 100),
+  };
+});
 
-export const updateExpenseSchema = createExpenseSchema.partial();
+export type CreateExpenseInput = z.input<typeof createExpenseSchema>;
+export type CreateExpenseOutput = z.output<typeof createExpenseSchema>;
+
+export const updateExpenseSchema = baseExpenseSchema.partial().transform((val) => {
+  const amt = val.amount ?? (val.amount_paise !== undefined ? val.amount_paise / 100 : undefined);
+  const gst = val.gst_amount ?? (val.gst_paise !== undefined ? val.gst_paise / 100 : undefined);
+  return {
+    ...val,
+    ...(amt !== undefined && { amount: amt, amount_paise: Math.round(amt * 100) }),
+    ...(gst !== undefined && { gst_amount: gst, gst_paise: Math.round(gst * 100) }),
+  };
+});

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils/helpers'
 import {
-  Home,
+  LayoutDashboard,
   Users,
   ShoppingBag,
   FileText,
@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Wrench,
   Settings,
-  Search,
   Plus,
   ChevronDown,
   ChevronRight,
@@ -24,14 +23,21 @@ import {
   Sparkles,
   Zap,
   Award,
+  BookOpen,
+  Store,
+  Layers,
+  Building2,
+  Calendar,
+  AlertTriangle,
 } from 'lucide-react'
 import type { BusinessCategory } from '@/types/app.types'
-import { GlobalSearchModal } from '@/components/common/global-search-modal'
+import { useCategoryConfig } from '@/lib/hooks/useCategoryConfig'
 
 interface NavSubItem {
   label: string
   href: string
   plusHref?: string
+  badge?: string
 }
 
 interface NavMenuItem {
@@ -41,15 +47,46 @@ interface NavMenuItem {
   icon: React.ElementType
   hasPlusShortcut?: boolean
   plusActionHref?: string
+  badge?: string
   subItems?: NavSubItem[]
 }
 
-const VYAPAR_NAV_ITEMS: NavMenuItem[] = [
+const NAV_MENU_ITEMS: NavMenuItem[] = [
   {
-    id: 'home',
-    label: 'Home',
+    id: 'dashboard',
+    label: 'Dashboard',
     href: '/dashboard',
-    icon: Home,
+    icon: LayoutDashboard,
+  },
+  {
+    id: 'sale',
+    label: 'Sales',
+    icon: FileText,
+    hasPlusShortcut: true,
+    plusActionHref: '/sales/invoices/new',
+    subItems: [
+      { label: 'New Sale', href: '/sales/invoices/new' },
+      { label: 'Invoices', href: '/sales/invoices', plusHref: '/sales/invoices/new' },
+      { label: 'Quotations', href: '/sales/quotations', plusHref: '/sales/quotations/new' },
+      { label: 'Sales Orders', href: '/sales/orders' },
+      { label: 'Proforma', href: '/sales/proforma-invoices' },
+      { label: 'Delivery Challan', href: '/sales/challans' },
+      { label: 'Sales Return', href: '/sales/credit-notes' },
+    ],
+  },
+  {
+    id: 'purchase',
+    label: 'Purchase',
+    icon: ShoppingCart,
+    hasPlusShortcut: true,
+    plusActionHref: '/purchases/bills/new',
+    subItems: [
+      { label: 'New Purchase', href: '/purchases/bills/new' },
+      { label: 'Purchase Bills', href: '/purchases/bills', plusHref: '/purchases/bills/new' },
+      { label: 'Purchase Orders', href: '/purchases/orders' },
+      { label: 'Purchase Return', href: '/purchases/debit-notes' },
+      { label: 'Debit Notes', href: '/purchases/debit-notes' },
+    ],
   },
   {
     id: 'parties',
@@ -58,68 +95,39 @@ const VYAPAR_NAV_ITEMS: NavMenuItem[] = [
     hasPlusShortcut: true,
     plusActionHref: '/parties?action=new',
     subItems: [
-      { label: 'Party Details', href: '/parties', plusHref: '/parties?action=new' },
-      { label: 'Whatsapp Connect', href: '/parties?tab=whatsapp' },
-      { label: 'VANIRA Network', href: '/parties?tab=network' },
+      { label: 'Customers', href: '/parties?tab=customers', plusHref: '/parties?tab=customers&action=new' },
+      { label: 'Suppliers', href: '/parties?tab=suppliers', plusHref: '/parties?tab=suppliers&action=new' },
     ],
   },
   {
-    id: 'items',
-    label: 'Items',
-    href: '/products',
+    id: 'inventory',
+    label: 'Inventory',
     icon: ShoppingBag,
     hasPlusShortcut: true,
     plusActionHref: '/products?action=new',
-  },
-  {
-    id: 'sale',
-    label: 'Sale',
-    icon: FileText,
-    hasPlusShortcut: true,
-    plusActionHref: '/sales/invoices/new',
     subItems: [
-      { label: 'Sale Invoices', href: '/sales/invoices' },
-      { label: 'Estimate / Quotation', href: '/sales/quotations' },
-      { label: 'Payment-In', href: '/sales/payments' },
-      { label: 'Sale Order', href: '/sales/orders' },
-      { label: 'Delivery Challan', href: '/sales/challans' },
-      { label: 'Sale Return / Cr. Note', href: '/sales/credit-notes' },
+      { label: 'Products', href: '/products', plusHref: '/products?action=new' },
+      { label: 'Stock', href: '/inventory' },
+      { label: 'Stock Ledger', href: '/inventory' },
+      { label: 'Warehouses', href: '/inventory/warehouses' },
+      { label: 'Stock Transfer', href: '/inventory/transfers' },
+      { label: 'Stock Adjustment', href: '/inventory/adjustments' },
+      { label: 'Barcode', href: '/inventory/barcodes' },
+      { label: 'Batches', href: '/inventory/batches' },
+      { label: 'Serial Numbers', href: '/inventory/serials' },
     ],
   },
   {
-    id: 'purchase_expense',
-    label: 'Purchase & Expense',
-    icon: ShoppingCart,
-    hasPlusShortcut: true,
-    plusActionHref: '/purchases/bills/new',
-    subItems: [
-      { label: 'Purchase Bills', href: '/purchases/bills' },
-      { label: 'Payment-Out', href: '/purchases/payments' },
-      { label: 'Purchase Order', href: '/purchases/orders' },
-      { label: 'Purchase Return / Dr. Note', href: '/purchases/debit-notes' },
-      { label: 'Expenses', href: '/expenses' },
-    ],
-  },
-  {
-    id: 'grow_business',
-    label: 'Grow Your Business',
-    icon: TrendingUp,
-    subItems: [
-      { label: 'My Online Store', href: '/store' },
-      { label: 'Business Cards', href: '/cards' },
-      { label: 'Greetings', href: '/greetings' },
-      { label: 'Bulk SMS Marketing', href: '/sms' },
-    ],
-  },
-  {
-    id: 'cash_bank',
-    label: 'Cash & Bank',
+    id: 'finance',
+    label: 'Money',
     icon: Landmark,
     subItems: [
-      { label: 'Bank Accounts', href: '/cash-bank' },
-      { label: 'Cash in Hand', href: '/cash-bank?tab=cash' },
-      { label: 'Cheques', href: '/cash-bank?tab=cheques' },
-      { label: 'Loan Accounts', href: '/cash-bank?tab=loans' },
+      { label: 'Payment In', href: '/sales/payments' },
+      { label: 'Payment Out', href: '/purchases/payments' },
+      { label: 'Expenses', href: '/expenses' },
+      { label: 'Cash / Bank', href: '/cash-bank' },
+      { label: 'Receivables', href: '/outstanding?type=receivables' },
+      { label: 'Payables', href: '/outstanding?type=payables' },
     ],
   },
   {
@@ -129,38 +137,31 @@ const VYAPAR_NAV_ITEMS: NavMenuItem[] = [
     icon: BarChart3,
   },
   {
-    id: 'sync_backup',
-    label: 'Sync, Share & Backup',
-    icon: RefreshCw,
+    id: 'accounting',
+    label: 'Accounting',
+    icon: BookOpen,
     subItems: [
-      { label: 'Auto Backup', href: '/settings?tab=backup' },
-      { label: 'Backup to Computer', href: '/settings?tab=backup' },
-      { label: 'Restore Backup', href: '/settings?tab=backup' },
-    ],
-  },
-  {
-    id: 'utilities',
-    label: 'Utilities',
-    icon: Wrench,
-    subItems: [
-      { label: 'Import Items', href: '/settings?tab=items' },
-      { label: 'Import Parties', href: '/parties' },
-      { label: 'Invoice Themes', href: '/invoice-themes' },
-      { label: 'Staff & Roles', href: '/staff' },
-      { label: 'GST Filing Portal', href: '/gst' },
+      { label: 'Chart of Accounts', href: '/accounting/chart-of-accounts' },
+      { label: 'Journal Entries', href: '/accounting/journal-entries' },
+      { label: 'General Ledger', href: '/accounting/general-ledger' },
+      { label: 'Financial Periods', href: '/accounting/periods' },
+      { label: 'Cost Centers', href: '/accounting/cost-centers' },
+      { label: 'Bank Reconciliation', href: '/accounting/reconciliation' },
+      { label: 'Trial Balance', href: '/accounting/trial-balance' },
+      { label: 'Profit & Loss', href: '/accounting/profit-and-loss' },
+      { label: 'Balance Sheet', href: '/accounting/balance-sheet' },
     ],
   },
   {
     id: 'settings',
     label: 'Settings',
-    href: '/settings',
     icon: Settings,
-  },
-  {
-    id: 'pricing',
-    label: 'Plans & Pricing',
-    href: '/pricing',
-    icon: Award,
+    href: '/settings',
+    subItems: [
+      { label: 'Business Profile', href: '/settings/business-profile' },
+      { label: 'General Settings', href: '/settings' },
+      { label: 'Taxes & GST', href: '/settings/tax' },
+    ],
   },
 ]
 
@@ -174,15 +175,19 @@ interface SidebarProps {
 export function Sidebar({ orgName, orgInitials, businessCategory, onCloseMobile }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [premiumModalOpen, setPremiumModalOpen] = useState(false)
+  const categoryConfig = useCategoryConfig()
   const [isPremium, setIsPremium] = useState(false)
 
-  // Expandable group states (Parties, Sale, Purchase open by default if matched)
+  // Expandable group states
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    parties: pathname.startsWith('/parties'),
     sale: pathname.startsWith('/sales') || pathname.startsWith('/pos'),
-    purchase_expense: pathname.startsWith('/purchases') || pathname.startsWith('/expenses'),
+    purchase: pathname.startsWith('/purchases') || pathname.startsWith('/expenses'),
+    parties: pathname.startsWith('/parties') || pathname.startsWith('/customers') || pathname.startsWith('/suppliers'),
+    inventory: pathname.startsWith('/products') || pathname.startsWith('/inventory'),
+    finance: pathname.startsWith('/cash-bank') || pathname.startsWith('/outstanding'),
+    accounting: pathname.startsWith('/accounting'),
+    reports: pathname.startsWith('/reports'),
+    settings: pathname.startsWith('/settings') || pathname.startsWith('/staff') || pathname.startsWith('/invoice-themes'),
   })
 
   // Check if premium is active
@@ -200,151 +205,161 @@ export function Sidebar({ orgName, orgInitials, businessCategory, onCloseMobile 
   const isRouteActive = (href?: string) => {
     if (!href) return false
     if (href === '/dashboard') return pathname === '/dashboard'
-    return pathname.startsWith(href)
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
   return (
-    <>
-      <aside className="flex flex-col h-full w-60 bg-[#161928] text-slate-300 flex-shrink-0 select-none border-r border-slate-800/80 font-sans min-h-0 overflow-hidden">
-        {/* Top Search Input: Open Anything (Ctrl+F) */}
-        <div className="p-3 border-b border-slate-800/60 shrink-0">
-          <button
-            onClick={() => setIsSearchOpen(true)}
-            className="w-full h-8.5 px-3 bg-[#1d2237] hover:bg-[#232942] border border-slate-700/60 rounded-lg flex items-center justify-between text-xs text-slate-400 transition-colors shadow-2xs group cursor-pointer"
-          >
-            <div className="flex items-center gap-2 truncate">
-              <Search className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-200" />
-              <span className="text-slate-300 text-[11px] font-medium">Open Anything</span>
+    <aside className="flex flex-col h-full w-60 bg-[#0d131f] text-slate-300 flex-shrink-0 select-none border-r border-slate-800 font-sans min-h-0 overflow-hidden shadow-sm">
+      {/* Brand Identity Header */}
+      <div className="h-12 px-3.5 flex items-center justify-between border-b border-slate-800/80 bg-[#090d16] shrink-0">
+        <Link
+          href="/dashboard"
+          onClick={onCloseMobile}
+          className="flex items-center gap-2 group cursor-pointer"
+        >
+          {/* Original Geometric Emblem: Modern Indigo & Emerald Hex-Prism */}
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-500 p-0.5 shadow-xs flex items-center justify-center">
+            <div className="w-full h-full bg-[#0d131f] rounded-[6px] flex items-center justify-center group-hover:bg-transparent transition-colors">
+              <span className="font-black text-white text-[12px] tracking-tighter">VB</span>
             </div>
-            <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-[#161928] text-slate-400 border border-slate-700 rounded">
-              Ctrl+F
-            </kbd>
-          </button>
-        </div>
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-extrabold text-white text-[13px] tracking-wide group-hover:text-indigo-400 transition-colors">
+              VANIRA
+            </span>
+            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest">
+              BusinessOS
+            </span>
+          </div>
+        </Link>
 
-        {/* Vyapar Core Navigation List */}
-        <nav className="flex-1 min-h-0 overflow-y-auto py-2 px-2 space-y-0.5 scrollbar-thin scrollbar-thumb-slate-800">
-          {VYAPAR_NAV_ITEMS.map((item) => {
-            const Icon = item.icon
-            const hasSub = Boolean(item.subItems && item.subItems.length > 0)
-            const isGroupExpanded = Boolean(openGroups[item.id])
-            const isSelfActive = isRouteActive(item.href)
-            const isChildActive = hasSub && item.subItems?.some((sub) => isRouteActive(sub.href))
-            const isActive = isSelfActive || isChildActive
+        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+          v2.5
+        </span>
+      </div>
 
-            if (hasSub) {
-              return (
-                <div key={item.id} className="space-y-0.5">
-                  <div
-                    className={cn(
-                      'flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors group',
-                      isActive
-                        ? 'text-white bg-[#22283f]'
-                        : 'text-slate-300 hover:bg-[#1e2338] hover:text-white'
-                    )}
-                    onClick={() => toggleGroup(item.id)}
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <Icon
-                        className={cn(
-                          'h-4 w-4 flex-shrink-0',
-                          isActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-200'
-                        )}
-                      />
-                      <span className="text-[12px] truncate">{item.label}</span>
-                    </div>
+      {/* Navigation List */}
+      <nav className="flex-1 min-h-0 overflow-y-auto py-2.5 px-2 space-y-0.5 scrollbar-thin scrollbar-thumb-slate-800">
+        {NAV_MENU_ITEMS.map((item) => {
+          const Icon = item.icon
+          const hasSub = Boolean(item.subItems && item.subItems.length > 0)
+          const isGroupExpanded = Boolean(openGroups[item.id])
+          const isSelfActive = isRouteActive(item.href)
+          const isChildActive = hasSub && item.subItems?.some((sub) => isRouteActive(sub.href))
+          const isActive = isSelfActive || isChildActive
 
-                    <div className="flex items-center gap-1.5">
-                      {item.hasPlusShortcut && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (item.plusActionHref) router.push(item.plusActionHref)
-                          }}
-                          className="h-4.5 w-4.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                          title={`Quick Add in ${item.label}`}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
+          if (hasSub) {
+            return (
+              <div key={item.id} className="space-y-0.5">
+                <div
+                  className={cn(
+                    'flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all group',
+                    isActive
+                      ? 'text-white bg-slate-800/80 shadow-2xs'
+                      : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                  )}
+                  onClick={() => toggleGroup(item.id)}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 flex-shrink-0 transition-colors',
+                        isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-200'
                       )}
-                      {isGroupExpanded ? (
-                        <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                      )}
-                    </div>
+                    />
+                    <span className="text-[12px] truncate">{item.label}</span>
                   </div>
 
-                  {/* Submenu with red active indicator line */}
-                  {isGroupExpanded && (
-                    <div className="pl-4 ml-3 border-l border-slate-700/60 space-y-0.5 py-1">
-                      {item.subItems?.map((sub) => {
-                        const subActive = isRouteActive(sub.href)
-                        return (
-                          <div
-                            key={sub.label}
-                            className={cn(
-                              'group/sub flex items-center justify-between px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors',
-                              subActive
-                                ? 'bg-red-600/90 text-white font-bold shadow-xs'
-                                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
-                            )}
-                          >
-                            <Link
-                              href={sub.href}
-                              onClick={onCloseMobile}
-                              className="flex-1 truncate"
-                            >
-                              {sub.label}
-                            </Link>
-
-                            <div className="flex items-center gap-1">
-                              {sub.plusHref && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    router.push(sub.plusHref!)
-                                  }}
-                                  className="h-4 w-4 rounded hover:bg-slate-700/80 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                                  title={`Add new ${sub.label}`}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                              )}
-                              {subActive && !sub.plusHref && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {item.hasPlusShortcut && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.plusActionHref) router.push(item.plusActionHref)
+                        }}
+                        className="h-4.5 w-4.5 rounded-md hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                        title={`Quick Add in ${item.label}`}
+                      >
+                        <Plus className="h-3 w-3 stroke-[2.5]" />
+                      </button>
+                    )}
+                    {isGroupExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                    )}
+                  </div>
                 </div>
-              )
-            }
 
+                {/* Submenu with refined active pill */}
+                {isGroupExpanded && (
+                  <div className="pl-3.5 ml-2.5 border-l border-slate-800 space-y-0.5 py-1">
+                    {item.subItems?.map((sub) => {
+                      const subActive = isRouteActive(sub.href)
+                      return (
+                        <div
+                          key={sub.label}
+                          className={cn(
+                            'group/sub flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all',
+                            subActive
+                              ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                          )}
+                        >
+                          <Link
+                            href={sub.href}
+                            onClick={onCloseMobile}
+                            className="flex-1 truncate"
+                          >
+                            {sub.label}
+                          </Link>
+
+                          <div className="flex items-center gap-1">
+                            {sub.plusHref && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  router.push(sub.plusHref!)
+                                }}
+                                className="h-4 w-4 rounded hover:bg-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                                title={`Add new ${sub.label}`}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </button>
+                            )}
+                            {subActive && !sub.plusHref && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          if (item.href) {
             return (
-              <div
+              <Link
                 key={item.id}
-                onClick={() => {
-                  if (item.href) router.push(item.href)
-                  onCloseMobile?.()
-                }}
+                href={item.href}
+                onClick={onCloseMobile}
                 className={cn(
-                  'flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-colors group cursor-pointer',
+                  'flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-all group cursor-pointer',
                   isSelfActive
-                    ? 'text-white bg-[#22283f] font-bold'
-                    : 'text-slate-300 hover:bg-[#1e2338] hover:text-white'
+                    ? 'text-white bg-indigo-600 font-semibold shadow-xs'
+                    : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
                 )}
               >
                 <div className="flex items-center gap-2.5 truncate">
                   <Icon
                     className={cn(
-                      'h-4 w-4 flex-shrink-0',
-                      isSelfActive ? 'text-red-500' : 'text-slate-400 group-hover:text-slate-200'
+                      'h-4 w-4 flex-shrink-0 transition-colors',
+                      isSelfActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
                     )}
                   />
                   <span className="text-[12px] truncate">{item.label}</span>
@@ -354,122 +369,120 @@ export function Sidebar({ orgName, orgInitials, businessCategory, onCloseMobile 
                   <button
                     type="button"
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
                       if (item.plusActionHref) router.push(item.plusActionHref)
                     }}
-                    className="h-4.5 w-4.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    className="h-4.5 w-4.5 rounded-md hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                     title={`Quick Add in ${item.label}`}
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3 w-3 stroke-[2.5]" />
                   </button>
                 )}
-              </div>
-            )
-          })}
-        </nav>
-
-        {/* Bottom Vyapar Pricing & Free Trial Card (Always pinned & visible) */}
-        <div className="p-2 pt-1 border-t border-slate-800/80 space-y-1.5 shrink-0 bg-[#161928] z-10">
-          {!isPremium ? (
-            <div className="bg-[#1b2034] rounded-xl p-2.5 border border-slate-700/60 space-y-2">
-              <div>
-                <div className="flex justify-between text-[11px] text-slate-300 font-medium mb-1">
-                  <span>4 days Free Trial left</span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 rounded-full w-4/6" />
-                </div>
-              </div>
-
-              {/* Gold Premium Button */}
-              <Link
-                href="/pricing"
-                className="w-full h-7 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold text-[11px] rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Crown className="h-3.5 w-3.5 fill-slate-950" />
-                <span>Get VANIRA Premium</span>
-                <ChevronRight className="h-3 w-3" />
               </Link>
-            </div>
-          ) : (
-            <div className="bg-[#1b2034] rounded-xl p-2.5 border border-amber-500/40 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Crown className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                  <span className="text-[11px] font-bold text-white">VANIRA Premium</span>
-                </div>
-                <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
-              </div>
-              <p className="text-[10px] text-slate-400">All Desktop Features Unlocked</p>
-            </div>
-          )}
+            )
+          }
 
-          {/* User / My Company Bottom Pill */}
-          <Link
-            href="/settings/business-profile"
-            className="w-full flex items-center justify-between p-2 rounded-xl bg-[#141724] hover:bg-[#1b2034] border border-slate-800 text-slate-300 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                {orgInitials || 'M'}
+          return (
+            <div
+              key={item.id}
+              onClick={() => {
+                if (item.href) router.push(item.href)
+                onCloseMobile?.()
+              }}
+              className={cn(
+                'flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-all group cursor-pointer',
+                isSelfActive
+                  ? 'text-white bg-indigo-600 font-semibold shadow-xs'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              )}
+            >
+              <div className="flex items-center gap-2.5 truncate">
+                <Icon
+                  className={cn(
+                    'h-4 w-4 flex-shrink-0 transition-colors',
+                    isSelfActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
+                  )}
+                />
+                <span className="text-[12px] truncate">{item.label}</span>
               </div>
+
+              {item.hasPlusShortcut && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (item.plusActionHref) router.push(item.plusActionHref)
+                  }}
+                  className="h-4.5 w-4.5 rounded-md hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  title={`Quick Add in ${item.label}`}
+                >
+                  <Plus className="h-3 w-3 stroke-[2.5]" />
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </nav>
+
+      {/* Bottom Subscription & Firm Status Card */}
+      <div className="p-2.5 border-t border-slate-800/90 space-y-2 shrink-0 bg-[#090d16] z-10">
+        {!isPremium ? (
+          <div className="bg-[#121927] rounded-xl p-2.5 border border-slate-800 space-y-2">
+            <div>
+              <div className="flex justify-between text-[11px] text-slate-300 font-medium mb-1">
+                <span>Free Edition Active</span>
+                <span className="text-[10px] text-emerald-400 font-bold">PRO READY</span>
+              </div>
+              <div className="w-full h-1 bg-slate-700/60 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full w-full" />
+              </div>
+            </div>
+
+            <Link
+              href="/pricing"
+              className="w-full h-7 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Crown className="h-3.5 w-3.5 fill-white" />
+              <span>Explore Pro Features</span>
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-[#121927] rounded-xl p-2.5 border border-emerald-500/30 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Crown className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                <span className="text-[11px] font-bold text-white">VANIRA Pro</span>
+              </div>
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
+            </div>
+            <p className="text-[10px] text-slate-400">All Modules & Cloud Sync Active</p>
+          </div>
+        )}
+
+        {/* Firm Profile Link */}
+        <Link
+          href="/settings"
+          className="w-full flex items-center justify-between p-2 rounded-xl bg-[#0f1523] hover:bg-[#151c2e] border border-slate-800 text-slate-300 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-6 w-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 shadow-2xs">
+              {orgInitials || 'B'}
+            </div>
+            <div className="flex flex-col min-w-0">
               <span className="text-xs font-semibold text-slate-200 truncate">
-                {orgName || 'My Company'}
+                {orgName || 'My Business'}
+              </span>
+              <span className="text-[9px] text-slate-500 truncate">
+                {categoryConfig.name}
               </span>
             </div>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
-          </Link>
-        </div>
-      </aside>
-
-      {/* Global Search Modal (Ctrl+F) */}
-      <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
-
-      {/* Premium Upgrade Modal */}
-      {premiumModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#181c2e] border border-amber-500/40 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
-                <Crown className="h-6 w-6 fill-amber-400" />
-              </div>
-              <h3 className="text-lg font-black text-white">Upgrade to VANIRA Premium</h3>
-              <p className="text-xs text-slate-400">
-                Unlimited Invoicing, Multi-device Desktop Sync, Thermal POS, Tally Export & 24x7 Priority Support.
-              </p>
-            </div>
-
-            <div className="p-4 bg-slate-900/80 rounded-2xl border border-slate-800 space-y-2">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300">1 Year Desktop License</span>
-                <span className="font-bold text-amber-400">₹2,499 / yr</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300">3 Years Super Saver (Best Value)</span>
-                <span className="font-bold text-emerald-400">₹4,999 / 3 yrs</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  window.open('https://wa.me/917795687633?text=I%20want%20to%20activate%20VANIRA%20Premium%20Plan', '_blank')
-                  setPremiumModalOpen(false)
-                }}
-                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all hover:brightness-105"
-              >
-                Activate Premium Now ⚡
-              </button>
-              <button
-                onClick={() => setPremiumModalOpen(false)}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition-colors"
-              >
-                Close
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+        </Link>
+      </div>
+    </aside>
   )
 }
+

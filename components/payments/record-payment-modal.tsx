@@ -12,18 +12,19 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { toast } from 'sonner';
 import { Loader2, DollarSign, AlertTriangle } from 'lucide-react';
 
-interface RecordPaymentModalProps {
+export interface RecordPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialCustomerId?: string;
 }
 
-export function RecordPaymentModal({ isOpen, onClose, onSuccess }: RecordPaymentModalProps) {
+export function RecordPaymentModal({ isOpen, onClose, onSuccess, initialCustomerId }: RecordPaymentModalProps) {
   const [loading, setLoading] = useState(false);
   const [fetchingInvoices, setFetchingInvoices] = useState(false);
 
   const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(initialCustomerId || '');
   
   const [paymentDate, setPaymentDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -42,8 +43,11 @@ export function RecordPaymentModal({ isOpen, onClose, onSuccess }: RecordPayment
   useEffect(() => {
     if (isOpen) {
       fetchCustomers();
+      if (initialCustomerId) {
+        setSelectedCustomerId(initialCustomerId);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialCustomerId]);
 
   // Load unpaid invoices when customer is selected
   useEffect(() => {

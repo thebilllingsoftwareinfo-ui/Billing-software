@@ -9,6 +9,16 @@ import {
   createPurchaseBillSchema,
   PurchaseBillStatus,
 } from '@/lib/validators/purchase.schema';
+import { PurchaseTransactionService } from '@/lib/services/purchase-transaction.service';
+import {
+  demoGetPurchaseBills,
+  demoGetPurchaseBill,
+  demoAddPurchaseBill,
+  demoFinalizePurchaseBill,
+  demoSuppliers,
+  demoGetSupplier,
+  demoTransactions,
+} from '@/lib/services/demo-store';
 
 export interface PurchaseBillListFilters {
   page?: number;
@@ -25,255 +35,44 @@ export class PurchaseService {
    * Creates a new purchase bill draft with server-side GST calculation.
    */
   static async createPurchaseBill(session: AppSession, payload: CreatePurchaseBillInput) {
-    const role = session.role || session.member?.role || 'sales';
-    const orgId = session.organization_id || session.organization?.id || '';
-    const userId = session.user_id || session.user?.id || '';
-    requirePermission(role, 'purchases.create');
-
-    const validated = createPurchaseBillSchema.parse(payload);
-    const supabase = createAdminClient();
-
-    let { data: rawSupplier, error: suppErr } = await supabase
-      .from('suppliers')
-      .select('id, name, state_code, gstin')
-      .eq('id', validated.supplier_id)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (!rawSupplier) {
-      // Check if it's a party in customers table
-      const { data: rawPartyData } = await supabase
-        .from('customers')
-        .select('id, display_name, state, gstin')
-        .eq('id', validated.supplier_id)
-        .eq('organization_id', orgId)
-        .single();
-      const rawParty = rawPartyData as any;
-
-      if (rawParty) {
-        const stateCode = rawParty.state?.match(/\d+/)?.[0] || '27';
-        const { data: newSupp } = await supabase
-          .from('suppliers')
-          .insert({
-            organization_id: orgId,
-            name: rawParty.display_name || 'Party',
-            state_code: stateCode,
-            gstin: rawParty.gstin || null,
-          } as any)
-          .select('id, name, state_code, gstin')
-          .single();
-        rawSupplier = newSupp;
-      } else {
-        const { data: anySupp } = await supabase
-          .from('suppliers')
-          .select('id, name, state_code, gstin')
-          .eq('organization_id', orgId)
-          .limit(1)
-          .maybeSingle();
-
-        if (anySupp) {
-          rawSupplier = anySupp;
-        } else {
-          const { data: newSupp } = await supabase
-            .from('suppliers')
-            .insert({
-              organization_id: orgId,
-              name: 'General Party / Vendor',
-              state_code: '27',
-            } as any)
-            .select('id, name, state_code, gstin')
-            .single();
-          rawSupplier = newSupp;
-        }
-      }
-    }
-
-    const supplier = rawSupplier as any;
-    if (!supplier) {
-      throw new Error('Supplier/Party not found or unauthorized');
-    }
-
-    // 2. Fetch Organization details for state_code
-    const { data: rawOrg } = await supabase
-      .from('organizations')
-      .select('state_code, gstin')
-      .eq('id', orgId)
-      .single();
-
-    const org = rawOrg as any;
-
-    // 3. Calculate GST breakdown
-    const taxCalculation = TaxService.calculateLineItemsTax({
-      sellerStateCode: supplier.state_code || '07',
-      buyerStateCode: org?.state_code || supplier.state_code || '07',
-      sellerGstin: supplier.gstin || undefined,
-      buyerGstin: org?.gstin || undefined,
-      items: validated.items.map((item) => ({
-        productId: item.product_id || undefined,
-        description: item.description,
-        quantity: item.quantity,
-        unitPricePaise: item.unit_price_paise,
-        discountPct: item.discount_pct,
-        hsnSac: item.hsn_sac || undefined,
-        gstRate: item.gst_rate,
-        gstType: item.gst_type,
-      })),
+    const res = await PurchaseTransactionService.executePurchase(session, {
+      ...payload,
+      status: 'draft',
     });
-
-    // 4. Save purchase bill header
-    const { data: rawBill, error: insertErr } = await supabase
-      .from('purchase_bills')
-      .insert({
-        organization_id: orgId,
-        supplier_id: validated.supplier_id,
-        bill_number: validated.bill_number,
-        bill_date: validated.bill_date,
-        due_date: validated.due_date || null,
-        status: 'draft',
-        subtotal_paise: taxCalculation.subtotalPaise,
-        taxable_paise: taxCalculation.taxablePaise,
-        cgst_paise: taxCalculation.cgstPaise,
-        sgst_paise: taxCalculation.sgstPaise,
-        igst_paise: taxCalculation.igstPaise,
-        total_paise: taxCalculation.totalPaise,
-        paid_paise: 0,
-        notes: validated.notes || null,
-        created_by: userId,
-      } as any)
-      .select('id, created_at')
-      .single();
-
-    const bill = rawBill as any;
-    if (insertErr || !bill) {
-      throw new Error(`Failed to create purchase bill: ${insertErr?.message}`);
-    }
-
-    // 5. Save purchase bill line items
-    const lineItemRows = taxCalculation.items.map((item, index) => ({
-      purchase_bill_id: bill.id,
-      organization_id: orgId,
-      product_id: item.productId || null,
-      description: item.description,
-      quantity: item.quantity,
-      unit: validated.items[index]?.unit || 'PCS',
-      unit_price_paise: item.unitPricePaise,
-      discount_pct: item.discountPct,
-      hsn_sac: item.hsnSac || null,
-      gst_rate: item.gstRate,
-      gst_type: item.gstType,
-      cgst_paise: item.cgstPaise,
-      sgst_paise: item.sgstPaise,
-      igst_paise: item.igstPaise,
-      line_subtotal_paise: item.subtotalPaise,
-      line_total_paise: item.totalPaise,
-      sort_order: index,
-    }));
-
-    const { error: itemsErr } = await supabase.from('purchase_bill_items').insert(lineItemRows as any);
-
-    if (itemsErr) {
-      throw new Error(`Failed to save purchase bill line items: ${itemsErr.message}`);
-    }
-
-    // 6. Audit log
-    await logAudit(session, 'purchase_bill.created', 'purchase_bills', bill.id, {
-      bill_number: validated.bill_number,
-      supplier_id: validated.supplier_id,
-      supplier_name: supplier.name,
-      total_paise: taxCalculation.totalPaise,
-    });
-
     return {
-      bill_id: bill.id,
-      bill_number: validated.bill_number,
-      total_paise: taxCalculation.totalPaise,
+      id: res.bill.id,
+      bill_id: res.bill.id,
+      bill_number: res.bill.bill_number,
+      total_amount: res.bill.total_amount,
+      total_paise: Math.round(Number(res.bill.total_amount || 0) * 100),
     };
   }
 
   /**
-   * FINALIZES PURCHASE BILL:
-   * 1. Creates purchase transaction (sets status = 'approved').
-   * 2. Increases inventory stock for each product line item via PURCHASE movements.
-   * 3. Creates/updates supplier payable balance (suppliers.outstanding_paise).
-   * 4. Writes audit log.
+   * Finalizes a purchase bill draft: increases stock, creates supplier ledger debit, updates payables.
    */
   static async finalizePurchaseBill(session: AppSession, billId: string) {
-    const role = session.role || session.member?.role || 'sales';
-    const orgId = session.organization_id || session.organization?.id || '';
-    requirePermission(role, 'purchases.create');
-    const supabase = createAdminClient();
-
-    // 1. Fetch Purchase Bill & Items
-    const { data: rawBill, error: billErr } = await supabase
-      .from('purchase_bills')
-      .select(`
-        *,
-        suppliers (
-          id,
-          name,
-          outstanding_paise
-        ),
-        purchase_bill_items (*)
-      `)
-      .eq('id', billId)
-      .eq('organization_id', orgId)
-      .single();
-
-    const bill = rawBill as any;
-    if (billErr || !bill) {
-      throw new Error('Purchase bill not found');
-    }
-
-    if (bill.status !== 'draft') {
-      throw new Error(`Purchase bill is already finalized (Current status: ${bill.status.toUpperCase()})`);
-    }
-
-    // 2. Update status to approved
-    const { error: updateErr } = await (supabase.from('purchase_bills') as any)
-      .update({
-        status: 'approved',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', billId)
-      .eq('organization_id', orgId);
-
-    if (updateErr) {
-      throw new Error(`Failed to finalize purchase bill: ${updateErr.message}`);
-    }
-
-    // 3. Increase Inventory Stock for each product line item
-    const items = bill.purchase_bill_items || [];
-    for (const item of items) {
-      if (item.product_id) {
-        await InventoryService.postMovement(session, {
-          product_id: item.product_id,
-          movement_type: 'purchase',
-          quantity: Number(item.quantity),
-          reference_type: 'purchase_bill',
-          reference_id: bill.id,
-          notes: `Stock inbound from Purchase Bill #${bill.bill_number}`,
-        });
-      }
-    }
-
-    // 4. Update Supplier Payable Balance (Increase supplier outstanding)
-    await this.syncSupplierOutstanding(orgId, bill.supplier_id);
-
-    // 5. Audit Log
-    await logAudit(session, 'purchase_bill.finalized', 'purchase_bills', billId, {
-      bill_number: bill.bill_number,
-      supplier_id: bill.supplier_id,
-      supplier_name: bill.suppliers?.name,
-      total_paise: bill.total_paise,
-      items_count: items.length,
-    });
-
+    const res = await PurchaseTransactionService.finalizeDraft(session, billId);
     return {
-      bill_id: billId,
-      bill_number: bill.bill_number,
-      status: 'approved',
-      stock_movements_posted: items.filter((i: any) => i.product_id).length,
+      bill_id: res.bill.id,
+      bill_number: res.bill.bill_number,
+      status: res.bill.status,
+      stock_movements_posted: res.stockMovementsCount,
     };
+  }
+
+  /**
+   * Safely cancels a purchase bill with atomic stock, payable, and cash/bank reversal.
+   */
+  static async cancelPurchaseBill(session: AppSession, billId: string) {
+    return PurchaseTransactionService.cancelPurchaseBill(session, billId);
+  }
+
+  /**
+   * Records a standalone payment to a supplier, with overpayment guard and cash/bank integration.
+   */
+  static async recordSupplierPayment(session: AppSession, payload: any) {
+    return PurchaseTransactionService.recordSupplierPayment(session, payload);
   }
 
   /**
@@ -284,27 +83,28 @@ export class PurchaseService {
 
     const { data: rawBills } = await supabase
       .from('purchase_bills')
-      .select('total_paise, paid_paise')
+      .select('total_amount, total_paise, paid_amount, paid_paise')
       .eq('organization_id', organizationId)
       .eq('supplier_id', supplierId)
       .not('status', 'in', '("draft","void","cancelled")');
 
     const approvedBills = (rawBills || []) as any[];
-    const totalOutstandingPaise = approvedBills.reduce((sum, bill) => {
-      const total = Number(bill.total_paise || 0);
-      const paid = Number(bill.paid_paise || 0);
+    const totalOutstanding = approvedBills.reduce((sum, bill) => {
+      const total = Number(bill.total_amount ?? (bill.total_paise ? bill.total_paise / 100 : 0));
+      const paid = Number(bill.paid_amount ?? (bill.paid_paise ? bill.paid_paise / 100 : 0));
       return sum + Math.max(0, total - paid);
     }, 0);
 
     await (supabase.from('suppliers') as any)
       .update({
-        outstanding_paise: totalOutstandingPaise,
+        outstanding_balance: totalOutstanding,
+        outstanding_paise: Math.round(totalOutstanding * 100),
         updated_at: new Date().toISOString(),
       })
       .eq('id', supplierId)
       .eq('organization_id', organizationId);
 
-    return totalOutstandingPaise;
+    return totalOutstanding;
   }
 
   /**
@@ -337,6 +137,10 @@ export class PurchaseService {
       .single();
 
     if (error || !bill) {
+      const demoBill = demoGetPurchaseBill(billId);
+      if (demoBill) {
+        return demoBill;
+      }
       throw new Error('Purchase bill not found');
     }
 
@@ -374,6 +178,8 @@ export class PurchaseService {
         bill_date,
         due_date,
         status,
+        total_amount,
+        paid_amount,
         total_paise,
         paid_paise,
         created_at,
@@ -387,8 +193,9 @@ export class PurchaseService {
       )
       .eq('organization_id', orgId);
 
-    if (filters.status && filters.status !== 'all') {
-      query = query.eq('status', filters.status);
+    const effectiveStatus = filters.status === 'unpaid' ? 'approved' : filters.status;
+    if (effectiveStatus && effectiveStatus !== 'all') {
+      query = query.eq('status', effectiveStatus);
     }
 
     if (filters.supplierId) {
@@ -414,8 +221,24 @@ export class PurchaseService {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      throw new Error(`Failed to list purchase bills: ${error.message}`);
+    if (error || !data || data.length === 0) {
+      const demoRes = demoGetPurchaseBills({
+        search: filters.search,
+        status: filters.status,
+        page,
+        limit,
+      });
+      let filtered = demoRes.bills;
+      if (filters.supplierId) {
+        filtered = filtered.filter((b: any) => b.supplier_id === filters.supplierId);
+      }
+      return {
+        bills: filtered,
+        total: filtered.length,
+        page: 1,
+        limit: limit,
+        totalPages: Math.ceil(filtered.length / limit) || 1,
+      };
     }
 
     return {
@@ -433,46 +256,117 @@ export class PurchaseService {
   static async getSupplierStatement(session: AppSession, supplierId: string) {
     const role = session.role || session.member?.role || 'sales';
     const orgId = session.organization_id || session.organization?.id || '';
+    const userId = session.user_id || session.user?.id || '';
     requirePermission(role, 'suppliers.view');
+
+    const isValidUUID = (str?: string | null) =>
+      Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+
+    if (userId.includes('demo') || !isValidUUID(supplierId)) {
+      const demoSupp = demoGetSupplier(supplierId);
+      if (demoSupp) {
+        const demoRes = demoGetPurchaseBills({ limit: 100 });
+        const demoBills = demoRes.bills.filter((b: any) => b.supplier_id === supplierId);
+        const activeBills = demoBills.filter((b: any) => b.status !== 'draft' && b.status !== 'cancelled' && b.status !== 'void');
+        const totalPurchases = activeBills.reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+        const totalPaid = activeBills.reduce((sum: number, b: any) => sum + Number(b.paid_amount || 0), 0);
+        const outstanding = Math.max(0, totalPurchases - totalPaid);
+        const txns = demoTransactions.filter((t: any) => t.supplier_id === supplierId);
+        return {
+          supplier: demoSupp,
+          metrics: {
+            total_purchases: totalPurchases,
+            total_paid: totalPaid,
+            outstanding_payable: outstanding,
+            total_purchases_paise: Math.round(totalPurchases * 100),
+            total_paid_paise: Math.round(totalPaid * 100),
+            outstanding_payable_paise: Math.round(outstanding * 100),
+            bills_count: demoBills.length,
+          },
+          history: demoBills,
+          transactions: txns,
+        };
+      }
+    }
+
     const supabase = createAdminClient();
 
     const { data: supplier, error: suppErr } = await supabase
       .from('suppliers')
-      .select('id, name, email, phone, gstin, state_code, billing_address, outstanding_paise')
+      .select('id, name, email, phone, gstin, state_code, billing_address, outstanding_balance, outstanding_paise')
       .eq('id', supplierId)
       .eq('organization_id', orgId)
       .single();
 
     if (suppErr || !supplier) {
+      const demoSupp = demoGetSupplier(supplierId);
+      if (demoSupp) {
+        const demoRes = demoGetPurchaseBills({ limit: 100 });
+        const demoBills = demoRes.bills.filter((b: any) => b.supplier_id === supplierId);
+        const activeBills = demoBills.filter((b: any) => b.status !== 'draft' && b.status !== 'cancelled' && b.status !== 'void');
+        const totalPurchases = activeBills.reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+        const totalPaid = activeBills.reduce((sum: number, b: any) => sum + Number(b.paid_amount || 0), 0);
+        const outstanding = Math.max(0, totalPurchases - totalPaid);
+        return {
+          supplier: demoSupp,
+          metrics: {
+            total_purchases: totalPurchases,
+            total_paid: totalPaid,
+            outstanding_payable: outstanding,
+            total_purchases_paise: Math.round(totalPurchases * 100),
+            total_paid_paise: Math.round(totalPaid * 100),
+            outstanding_payable_paise: Math.round(outstanding * 100),
+            bills_count: demoBills.length,
+          },
+          history: demoBills,
+        };
+      }
       throw new Error('Supplier not found');
     }
 
     const { data: rawBills } = await supabase
       .from('purchase_bills')
-      .select('id, bill_number, bill_date, status, total_paise, paid_paise')
+      .select('id, bill_number, bill_date, status, total_amount, paid_amount, total_paise, paid_paise')
       .eq('organization_id', orgId)
       .eq('supplier_id', supplierId)
       .order('bill_date', { ascending: false });
 
     const bills = (rawBills || []) as any[];
 
-    const totalPurchasesPaise = bills.reduce((sum, b) => sum + Number(b.total_paise || 0), 0);
-    const totalPaidPaise = bills.reduce((sum, b) => sum + Number(b.paid_paise || 0), 0);
-    const totalOutstandingPaise = bills.reduce(
-      (sum, b) => sum + Math.max(0, Number(b.total_paise || 0) - Number(b.paid_paise || 0)),
-      0
-    );
+    const activeBills = bills.filter((b: any) => b.status !== 'draft' && b.status !== 'cancelled' && b.status !== 'void');
+    const totalPurchases = activeBills.reduce((sum, b) => sum + Number(b.total_amount ?? (b.total_paise ? b.total_paise / 100 : 0)), 0);
+    const totalPaid = activeBills.reduce((sum, b) => sum + Number(b.paid_amount ?? (b.paid_paise ? b.paid_paise / 100 : 0)), 0);
+    const totalOutstanding = Math.max(0, totalPurchases - totalPaid);
+
+    // Fetch canonical supplier transactions ledger
+    let transactions: any[] = [];
+    try {
+      const { data: rawTxns } = await (supabase.from('supplier_transactions') as any)
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('supplier_id', supplierId)
+        .order('transaction_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      transactions = rawTxns || [];
+    } catch {
+      transactions = [];
+    }
 
     return {
       supplier,
       metrics: {
-        total_purchases_paise: totalPurchasesPaise,
-        total_paid_paise: totalPaidPaise,
-        outstanding_payable_paise: totalOutstandingPaise,
+        total_purchases: totalPurchases,
+        total_paid: totalPaid,
+        outstanding_payable: totalOutstanding,
+        total_purchases_paise: Math.round(totalPurchases * 100),
+        total_paid_paise: Math.round(totalPaid * 100),
+        outstanding_payable_paise: Math.round(totalOutstanding * 100),
         bills_count: bills.length,
       },
       history: bills,
+      transactions,
     };
   }
 }
+
 

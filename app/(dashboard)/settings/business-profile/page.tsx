@@ -1,137 +1,55 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  Building2,
-  Upload,
-  Trash2,
-  Save,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  FileText,
-  CreditCard,
-  QrCode,
-  Globe,
-  Phone,
-  Mail,
-  MapPin,
-  Landmark,
-  Sparkles,
-  ArrowLeft,
-  Eye,
-  ShieldCheck,
-  RefreshCw,
-  ShoppingCart,
-  UtensilsCrossed,
-  Pill,
-  Shirt,
-  Wrench,
-  Smartphone,
-  Truck,
-  Gem,
-  Sun,
-  Briefcase,
-  Store,
-  Package,
-  ChevronDown,
-  CheckCircle,
+import { 
+  Building2, Phone, Shield, Mail, Calendar, 
+  FileText, Folder, Map, MapPin, CloudUpload, 
+  Lightbulb, ShieldCheck, CheckCircle2, Building,
+  Camera, Check, Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { BusinessCategory } from '@/types/app.types'
 
-export interface BusinessTypeItem {
-  id: string
-  category: BusinessCategory
-  label: string
-  icon: any
-  color: string
-  bg: string
-}
-
-const BUSINESS_TYPES: BusinessTypeItem[] = [
-  { id: 'wholesale_distribution', category: 'wholesale', label: 'Wholesale & Distribution', icon: Truck, color: 'text-purple-600', bg: 'bg-purple-50' },
-  { id: 'jewelry_gold', category: 'jewelry', label: 'Jewelry & Gold Shop', icon: Gem, color: 'text-amber-600', bg: 'bg-amber-50' },
-  { id: 'retail_supermarket', category: 'retail', label: 'Retail & Supermarket', icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50' },
-  { id: 'restaurant_cafe', category: 'restaurant', label: 'Restaurant & Cafe', icon: UtensilsCrossed, color: 'text-orange-600', bg: 'bg-orange-50' },
-  { id: 'pharmacy_medical', category: 'medical', label: 'Pharmacy & Medical', icon: Pill, color: 'text-rose-600', bg: 'bg-rose-50' },
-  { id: 'service_business', category: 'services', label: 'Service Business', icon: Briefcase, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-  { id: 'textiles_fashion', category: 'retail', label: 'Textiles & Fashion', icon: Shirt, color: 'text-pink-600', bg: 'bg-pink-50' },
-  { id: 'hardware_sanitary', category: 'retail', label: 'Hardware & Sanitary', icon: Wrench, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-  { id: 'electronics_mobile', category: 'retail', label: 'Electronics & Mobile', icon: Smartphone, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-  { id: 'solar_clean_energy', category: 'services', label: 'Solar & Clean Energy', icon: Sun, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  { id: 'general_store', category: 'retail', label: 'General Store', icon: Store, color: 'text-teal-600', bg: 'bg-teal-50' },
-  { id: 'other', category: 'retail', label: 'Other / Custom', icon: Package, color: 'text-slate-600', bg: 'bg-slate-50' },
-]
+import { BUSINESS_STRUCTURE, normalizeBusinessClassification } from '@/lib/validators/organization.schema'
+import { INDIAN_STATES } from '@/lib/constants/indian-states'
 
 interface BusinessProfileFormState {
   name: string
-  legal_name: string
-  trade_name: string
-  logo_url: string
+  phone: string
+  gstin: string
+  email: string
+  account_books_date: string
   business_type: string
   business_category: string
-  gstin: string
-  pan: string
-  state_code: string
-  phone: string
-  email: string
-  website: string
-  address_line1: string
-  address_line2: string
-  city: string
   state: string
   pincode: string
-  country: string
-  bank_name: string
-  bank_account_name: string
-  bank_account_number: string
-  bank_ifsc: string
-  bank_branch: string
-  upi_id: string
-  invoice_prefix: string
-  terms_and_conditions: string
-  notes: string
+  address: string
+  logo_url: string
+  signature_url: string
 }
 
 export default function BusinessProfileSettingsPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<BusinessProfileFormState>({
     name: '',
-    legal_name: '',
-    trade_name: '',
-    logo_url: '',
-    business_type: 'wholesale_distribution',
-    business_category: 'wholesale',
-    gstin: '',
-    pan: '',
-    state_code: '27',
     phone: '',
+    gstin: '',
     email: '',
-    website: '',
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state: 'Maharashtra',
+    account_books_date: new Date().toISOString().split('T')[0],
+    business_type: '',
+    business_category: '',
+    state: '',
     pincode: '',
-    country: 'India',
-    bank_name: '',
-    bank_account_name: '',
-    bank_account_number: '',
-    bank_ifsc: '',
-    bank_branch: '',
-    upi_id: '',
-    invoice_prefix: 'INV-',
-    terms_and_conditions: '',
-    notes: '',
+    address: '',
+    logo_url: '',
+    signature_url: '',
   })
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'bank' | 'invoice_defaults' | 'preview'>('profile')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const signatureInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchProfile()
@@ -143,40 +61,25 @@ export default function BusinessProfileSettingsPage() {
       const res = await fetch('/api/organizations/profile')
       const json = await res.json()
       if (json.success && json.data) {
-        const rawType = json.data.business_type || json.data.business_category || 'wholesale_distribution'
-        const matched = BUSINESS_TYPES.find((t) => t.id === rawType || t.category === rawType)
+        const normalized = normalizeBusinessClassification(
+          json.data.business_type,
+          json.data.business_category
+        )
 
-        setProfile({
+        setProfile((prev) => ({
+          ...prev,
           name: json.data.name || '',
-          legal_name: json.data.legal_name || '',
-          trade_name: json.data.trade_name || '',
-          logo_url: json.data.logo_url || '',
-          business_type: matched ? matched.id : rawType,
-          business_category: matched ? matched.category : (json.data.business_category || 'wholesale'),
-          gstin: json.data.gstin || '',
-          pan: json.data.pan || '',
-          state_code: json.data.state_code || '27',
           phone: json.data.phone || '',
+          gstin: json.data.gstin || '',
           email: json.data.email || '',
-          website: json.data.website || '',
-          address_line1: json.data.address_line1 || '',
-          address_line2: json.data.address_line2 || '',
-          city: json.data.city || '',
-          state: json.data.state || 'Maharashtra',
+          business_type: normalized.business_type,
+          business_category: normalized.business_category,
+          state: json.data.state || '',
           pincode: json.data.pincode || '',
-          country: json.data.country || 'India',
-          bank_name: json.data.bank_name || '',
-          bank_account_name: json.data.bank_account_name || '',
-          bank_account_number: json.data.bank_account_number || '',
-          bank_ifsc: json.data.bank_ifsc || '',
-          bank_branch: json.data.bank_branch || '',
-          upi_id: json.data.upi_id || '',
-          invoice_prefix: json.data.invoice_prefix || 'INV-',
-          terms_and_conditions:
-            json.data.terms_and_conditions ||
-            '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged on overdue payments.',
-          notes: json.data.notes || 'Thank you for your valued business!',
-        })
+          address: json.data.address_line1 || json.data.address || '',
+          logo_url: json.data.logo_url || '',
+          signature_url: json.data.signature_url || '',
+        }))
       }
     } catch (err) {
       console.error('Failed to load business profile:', err)
@@ -188,32 +91,35 @@ export default function BusinessProfileSettingsPage() {
 
   const handleFieldChange = (field: keyof BusinessProfileFormState, value: string) => {
     setProfile((prev) => {
-      const updated = { ...prev, [field]: value }
-
-      // Auto-extract PAN from GSTIN if 15 chars (chars 3 to 12)
-      if (field === 'gstin' && value.length >= 12) {
-        const extractedPan = value.substring(2, 12).toUpperCase()
-        if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(extractedPan) && !prev.pan) {
-          updated.pan = extractedPan
+      const next = { ...prev, [field]: value }
+      if (field === 'business_type') {
+        const allowedCats = BUSINESS_STRUCTURE[value] || []
+        if (allowedCats.length > 0 && !allowedCats.includes(next.business_category)) {
+          next.business_category = allowedCats[0] || ''
         }
-        const stateCode = value.substring(0, 2)
-        if (/^\d{2}$/.test(stateCode)) {
-          updated.state_code = stateCode
+      } else if (field === 'business_category') {
+        // Auto-detect and sync matching business type if empty or mismatched
+        const currentTypeCats = next.business_type ? BUSINESS_STRUCTURE[next.business_type] : []
+        if (!currentTypeCats?.includes(value)) {
+          for (const [t, cats] of Object.entries(BUSINESS_STRUCTURE)) {
+            if (cats.includes(value)) {
+              next.business_type = t
+              break
+            }
+          }
         }
       }
-
-      return updated
+      return next
     })
   }
 
-  // Handle Logo Upload (converts to Base64 data URL)
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'logo_url' | 'signature_url') => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Limit to 2MB
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Logo image size must be under 2 MB')
+    // Limit to 1.5MB
+    if (file.size > 1.5 * 1024 * 1024) {
+      toast.error('File size must be under 1.5 MB')
       return
     }
 
@@ -221,43 +127,42 @@ export default function BusinessProfileSettingsPage() {
     reader.onload = (event) => {
       const base64 = event.target?.result as string
       if (base64) {
-        setProfile((prev) => ({ ...prev, logo_url: base64 }))
-        toast.success('Logo uploaded! Click "Save Changes" to apply to all bills.')
+        setProfile((prev) => ({ ...prev, [field]: base64 }))
+        toast.success(`${field === 'logo_url' ? 'Logo' : 'Signature'} uploaded successfully!`)
       }
     }
     reader.readAsDataURL(file)
   }
 
-  const handleRemoveLogo = () => {
-    setProfile((prev) => ({ ...prev, logo_url: '' }))
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-    toast.info('Logo removed')
-  }
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Canonical Field Validations
     if (!profile.name.trim()) {
       toast.error('Business Name is required')
       return
     }
 
+    if (!profile.business_type.trim()) {
+      toast.error('Business Type is required')
+      return
+    }
+
+    if (!profile.business_category.trim()) {
+      toast.error('Business Category is required')
+      return
+    }
+
+    if (!profile.state.trim()) {
+      toast.error('State is required')
+      return
+    }
+
     setSaving(true)
     try {
-      const matched = BUSINESS_TYPES.find(
-        (t) => t.id === profile.business_type || t.category === profile.business_type
-      )
-      const targetCategory = matched ? matched.category : (profile.business_type || 'wholesale')
-
-      // Set cookie client-side immediately so SSR components update instantly
-      document.cookie = `demo_category=${targetCategory}; path=/; max-age=2592000`
-
       const payload = {
         ...profile,
-        business_category: targetCategory,
-        business_type: profile.business_type || targetCategory,
+        address_line1: profile.address,
       }
 
       const res = await fetch('/api/organizations/profile', {
@@ -268,7 +173,7 @@ export default function BusinessProfileSettingsPage() {
 
       const json = await res.json()
       if (json.success) {
-        toast.success('Business Profile & Industry Category saved successfully!')
+        toast.success('Business Profile saved successfully!')
         router.refresh()
       } else {
         throw new Error(json.error || 'Failed to update profile')
@@ -281,661 +186,407 @@ export default function BusinessProfileSettingsPage() {
     }
   }
 
+  const calculateCompletion = () => {
+    const fieldsToCheck: (keyof BusinessProfileFormState)[] = [
+      'name', 'phone', 'gstin', 'email', 'business_type', 'business_category', 'state', 'pincode', 'address', 'logo_url', 'signature_url'
+    ];
+    let filled = 0;
+    fieldsToCheck.forEach(field => {
+      if (profile[field] && String(profile[field]).trim() !== '') filled++;
+    });
+    return Math.round((filled / fieldsToCheck.length) * 100);
+  }
+
+  const completionPercentage = calculateCompletion();
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-gray-400 text-xs">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-600 mr-2" />
+      <div className="flex h-full items-center justify-center text-gray-400 text-sm bg-[#f8fafc]">
         Loading business profile settings...
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/settings"
-            className="p-2 text-gray-500 hover:text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+    <div className="min-h-full bg-[#f8fafc] p-6 lg:p-8 font-sans">
+      <div className="max-w-[1400px] mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Business Profile Settings</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Manage your company details, logo, GSTIN, registered address, bank details & UPI for customer bills.
-            </p>
+            <h1 className="text-2xl font-bold text-[#1e293b]">Edit Profile</h1>
+            <p className="text-[#64748b] text-sm mt-1">Update your business information and manage your profile</p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={fetchProfile}
-            className="p-2.5 text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors shadow-2xs"
-            title="Reload Profile"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            <span>Save Profile Changes</span>
+          <button className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-[#f3e8ff] flex items-center justify-center">
+              <Lightbulb className="w-4 h-4 text-[#9333ea]" />
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-semibold text-[#1e293b]">Need Help?</div>
+              <div className="text-xs text-[#64748b]">Watch video guide</div>
+            </div>
           </button>
         </div>
-      </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex items-center gap-1 p-1.5 bg-gray-100/80 rounded-2xl w-fit text-xs font-medium text-gray-600">
-        <button
-          onClick={() => setActiveTab('profile')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'profile' ? 'bg-white text-indigo-600 font-bold shadow-xs' : 'hover:text-gray-900'
-          }`}
-        >
-          <Building2 className="h-4 w-4" /> Business Info & Logo
-        </button>
-        <button
-          onClick={() => setActiveTab('bank')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'bank' ? 'bg-white text-indigo-600 font-bold shadow-xs' : 'hover:text-gray-900'
-          }`}
-        >
-          <Landmark className="h-4 w-4" /> Bank Account & UPI
-        </button>
-        <button
-          onClick={() => setActiveTab('invoice_defaults')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'invoice_defaults' ? 'bg-white text-indigo-600 font-bold shadow-xs' : 'hover:text-gray-900'
-          }`}
-        >
-          <FileText className="h-4 w-4" /> Bill & Invoice Defaults
-        </button>
-        <button
-          onClick={() => setActiveTab('preview')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'preview' ? 'bg-white text-indigo-600 font-bold shadow-xs' : 'hover:text-gray-900'
-          }`}
-        >
-          <Eye className="h-4 w-4" /> Live Bill Preview
-        </button>
-      </div>
+        {/* Top Information Cards */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col lg:flex-row gap-8 lg:items-center">
+          
+          {/* Logo Section */}
+          <div className="flex items-center gap-6 lg:w-1/3">
+            <div 
+              className="w-24 h-24 rounded-full border-2 border-dashed border-[#d8b4fe] bg-[#faf5ff] flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group"
+              onClick={() => logoInputRef.current?.click()}
+            >
+              {profile.logo_url ? (
+                <>
+                  <img src={profile.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                </>
+              ) : (
+                <Camera className="w-8 h-8 text-[#a855f7]" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-[15px] font-semibold text-[#1e293b]">Add Business Logo</h3>
+              <p className="text-xs text-[#64748b] mt-1 mb-3">Recommended size:<br/>512 x 512px (PNG, JPG)</p>
+              <button 
+                onClick={() => logoInputRef.current?.click()}
+                className="px-4 py-1.5 border border-[#a855f7] text-[#a855f7] text-xs font-medium rounded-lg hover:bg-[#faf5ff] transition-colors"
+              >
+                Upload Logo
+              </button>
+              <input type="file" ref={logoInputRef} onChange={(e) => handleFileUpload(e, 'logo_url')} accept="image/*" className="hidden" />
+            </div>
+          </div>
 
-      {/* Main Content Form */}
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* TAB 1: BUSINESS IDENTITY & LOGO */}
-        {activeTab === 'profile' && (
-          <div className="space-y-6">
-            {/* BUSINESS LOGO CARD */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-4">
-              <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <Upload className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">Business Logo (Prints on Invoices)</h3>
-                  <p className="text-[11px] text-gray-500">
-                    Upload your official company logo. This will automatically print on all GST invoices, bills, and PDF downloads.
-                  </p>
-                </div>
+          <div className="hidden lg:block w-px h-16 bg-gray-100"></div>
+
+          {/* Stats Cards */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-[#f8fafc] rounded-xl p-4 flex items-start gap-4">
+              <div className="bg-white p-2 rounded-lg shadow-sm">
+                <Building className="w-5 h-5 text-[#3b82f6]" />
               </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-6 pt-2">
-                {/* Logo Preview Box */}
-                <div className="relative group">
-                  <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center p-2 overflow-hidden shadow-inner">
-                    {profile.logo_url ? (
-                      <img
-                        src={profile.logo_url}
-                        alt="Business Logo"
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center p-2">
-                        <Building2 className="h-8 w-8 text-gray-300 mx-auto mb-1" />
-                        <span className="text-[10px] text-gray-400 font-medium">No Logo Uploaded</span>
-                      </div>
-                    )}
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-[#1e293b]">Complete Your Profile</h4>
+                <p className="text-[11px] text-[#64748b] mt-0.5">Let&apos;s make your business profile 100% complete</p>
+                <div className="flex items-center gap-2 mt-3">
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#6366f1] rounded-full" style={{ width: `${completionPercentage}%` }}></div>
                   </div>
-                </div>
-
-                {/* Upload & Action Controls */}
-                <div className="space-y-3 flex-1 text-xs">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleLogoUpload}
-                    accept="image/png, image/jpeg, image/svg+xml, image/webp"
-                    className="hidden"
-                  />
-
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl shadow-xs transition-colors"
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Upload Business Logo
-                    </button>
-
-                    {profile.logo_url && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-xl border border-rose-200 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Remove Logo
-                      </button>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-gray-500">
-                    Recommended format: <strong>PNG, SVG, or JPG</strong> (transparent background recommended, max 2MB).
-                  </p>
+                  <span className="text-xs font-medium text-[#64748b]">{completionPercentage}%</span>
                 </div>
               </div>
             </div>
 
-            {/* COMPANY IDENTIFICATION */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-4">
-              <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-indigo-600" />
-                Company Identity & GST Details
-              </h3>
+            <div className="bg-[#f0fdf4] rounded-xl p-4 flex items-start gap-4">
+              <div className="bg-white p-2 rounded-lg shadow-sm">
+                <ShieldCheck className="w-5 h-5 text-[#22c55e]" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-[#1e293b]">Your Data is Safe</h4>
+                <p className="text-[11px] text-[#64748b] mt-0.5 leading-relaxed">We use bank-level security to protect your information</p>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Business / Trade Name <span className="text-red-500">*</span>
-                  </label>
+            <div className="bg-[#f0fdfa] rounded-xl p-4 flex items-start gap-4">
+              <div className="bg-white p-2 rounded-lg shadow-sm">
+                <CheckCircle2 className="w-5 h-5 text-[#10b981]" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-[#1e293b]">Profile Strength</h4>
+                <p className="text-[11px] text-[#64748b] mt-0.5 leading-relaxed">Strong profile increases trust & credibility</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Form Area */}
+        <form onSubmit={handleSave} className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+          <div className="p-6 lg:p-8 grid grid-cols-1 md:grid-cols-3 gap-10">
+            
+            {/* Column 1 */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-[#f5f3ff] flex items-center justify-center">
+                  <Building2 className="w-4 h-4 text-[#8b5cf6]" />
+                </div>
+                <h2 className="text-base font-bold text-[#1e293b]">Business Details</h2>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Business Name <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Building2 className="w-4 h-4 text-gray-400" />
+                  </div>
                   <input
                     type="text"
-                    placeholder="e.g. Acme Industrial Systems"
+                    required
                     value={profile.name}
                     onChange={(e) => handleFieldChange('name', e.target.value)}
-                    required
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 font-medium transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Legal / Registered Entity Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Acme Industrial Systems Pvt Ltd"
-                    value={profile.legal_name}
-                    onChange={(e) => handleFieldChange('legal_name', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Trade / Brand Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Acme Systems"
-                    value={profile.trade_name}
-                    onChange={(e) => handleFieldChange('trade_name', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    GSTIN (15 Digits)
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    placeholder="e.g. 27AABCU9603R1ZM"
-                    value={profile.gstin}
-                    onChange={(e) => handleFieldChange('gstin', e.target.value.toUpperCase())}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono uppercase text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Company PAN (10 Digits)
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    placeholder="e.g. AABCU9603R"
-                    value={profile.pan}
-                    onChange={(e) => handleFieldChange('pan', e.target.value.toUpperCase())}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono uppercase text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    State GST Code (e.g. 27)
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={2}
-                    placeholder="27"
-                    value={profile.state_code}
-                    onChange={(e) => handleFieldChange('state_code', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-gray-900 transition-all"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400"
+                    placeholder="Wevly Technology"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* BUSINESS TYPE SELECTOR */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-4">
-              <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <Briefcase className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">Business Type / Industry Category</h3>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
-                    Select your industry to customize dashboard KPIs, workflows, and navigation for your business.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {BUSINESS_TYPES.map((type) => {
-                  const Icon = type.icon
-                  const isSelected = profile.business_type === type.id || profile.business_type === type.category || profile.business_category === type.category
-                  return (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => {
-                        handleFieldChange('business_type', type.id)
-                        handleFieldChange('business_category', type.category)
-                      }}
-                      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all border cursor-pointer ${
-                        isSelected
-                          ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
-                          : 'bg-gray-50/60 border-gray-200/80 hover:bg-gray-100/70 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-600 text-white' : `${type.bg} ${type.color}`} flex-shrink-0 transition-colors`}>
-                        <Icon className={`h-4 w-4 ${isSelected ? 'text-white' : type.color}`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className={`text-sm font-semibold block truncate ${isSelected ? 'text-indigo-950' : 'text-gray-800'}`}>
-                          {type.label}
-                        </span>
-                        <span className="text-[11px] text-gray-400 capitalize">
-                          {type.category} mode
-                        </span>
-                      </div>
-                      {isSelected && (
-                        <CheckCircle2 className="h-4 w-4 text-indigo-600 ml-auto flex-shrink-0" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {(profile.business_type || profile.business_category) && (
-                <div className="flex items-center justify-between p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs text-indigo-900 font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-                    Selected Industry:{' '}
-                    <strong>
-                      {BUSINESS_TYPES.find(
-                        (t) =>
-                          t.id === profile.business_type ||
-                          t.category === profile.business_type ||
-                          t.category === profile.business_category
-                      )?.label || profile.business_type}
-                    </strong>
-                  </span>
-                  <span className="text-[11px] text-indigo-700 bg-white px-2.5 py-0.5 rounded-md border border-indigo-200 font-semibold shadow-2xs">
-                    Tailored Dashboard Ready
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* CONTACT & REGISTERED ADDRESS */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-4">
-              <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-3 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-indigo-600" />
-                Contact & Registered Address (Prints on Bills)
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Business Phone / Mobile</label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="tel"
-                      placeholder="+91 98220 12345"
-                      value={profile.phone}
-                      onChange={(e) => handleFieldChange('phone', e.target.value)}
-                      className="w-full h-10 pl-9 pr-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all font-mono"
-                    />
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Phone Number</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Phone className="w-4 h-4 text-gray-400" />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Billing & Accounts Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="email"
-                      placeholder="billing@acmesystems.in"
-                      value={profile.email}
-                      onChange={(e) => handleFieldChange('email', e.target.value)}
-                      className="w-full h-10 pl-9 pr-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Website URL</label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="url"
-                      placeholder="https://www.acmesystems.in"
-                      value={profile.website}
-                      onChange={(e) => handleFieldChange('website', e.target.value)}
-                      className="w-full h-10 pl-9 pr-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Address Line 1 (Street / Premises)</label>
                   <input
-                    type="text"
-                    placeholder="Plot No. 108, Industrial Electronic Zone"
-                    value={profile.address_line1}
-                    onChange={(e) => handleFieldChange('address_line1', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Address Line 2 (Area / Landmark)</label>
-                  <input
-                    type="text"
-                    placeholder="Hinjewadi Phase 1"
-                    value={profile.address_line2}
-                    onChange={(e) => handleFieldChange('address_line2', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    placeholder="Pune"
-                    value={profile.city}
-                    onChange={(e) => handleFieldChange('city', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">State</label>
-                  <input
-                    type="text"
-                    placeholder="Maharashtra"
-                    value={profile.state}
-                    onChange={(e) => handleFieldChange('state', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">PIN Code</label>
-                  <input
-                    type="text"
-                    placeholder="411057"
-                    value={profile.pincode}
-                    onChange={(e) => handleFieldChange('pincode', e.target.value)}
-                    className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-gray-900 transition-all"
+                    type="tel"
+                    value={profile.phone}
+                    onChange={(e) => handleFieldChange('phone', e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400"
+                    placeholder="7360815930"
                   />
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* TAB 2: BANK ACCOUNT & UPI */}
-        {activeTab === 'bank' && (
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-6">
-            <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                <Landmark className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">Bank Account & UPI Payment Details</h3>
-                <p className="text-[11px] text-gray-500">
-                  These payment details will be printed on all invoices so customers can pay directly via NEFT, RTGS, IMPS, or UPI.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. HDFC Bank Ltd"
-                  value={profile.bank_name}
-                  onChange={(e) => handleFieldChange('bank_name', e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 font-medium transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Account Beneficiary Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Acme Industrial Systems Pvt Ltd"
-                  value={profile.bank_account_name}
-                  onChange={(e) => handleFieldChange('bank_account_name', e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Bank Account Number</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 50200098765432"
-                  value={profile.bank_account_number}
-                  onChange={(e) => handleFieldChange('bank_account_number', e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-gray-900 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Bank IFSC Code</label>
-                <input
-                  type="text"
-                  placeholder="e.g. HDFC0001234"
-                  value={profile.bank_ifsc}
-                  onChange={(e) => handleFieldChange('bank_ifsc', e.target.value.toUpperCase())}
-                  className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono uppercase text-gray-900 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Branch Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Hinjewadi Phase 1, Pune"
-                  value={profile.bank_branch}
-                  onChange={(e) => handleFieldChange('bank_branch', e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  UPI ID (VPA for Instant QR & Mobile Pay)
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569] flex items-center gap-1">
+                  GSTIN 
+                  <span className="w-3.5 h-3.5 rounded-full border border-gray-300 text-[9px] flex items-center justify-center text-gray-400">i</span>
                 </label>
                 <div className="relative">
-                  <QrCode className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Shield className="w-4 h-4 text-gray-400" />
+                  </div>
                   <input
                     type="text"
-                    placeholder="e.g. acmesystems@okhdfcbank"
-                    value={profile.upi_id}
-                    onChange={(e) => handleFieldChange('upi_id', e.target.value)}
-                    className="w-full h-10 pl-9 pr-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono text-gray-900 transition-all"
+                    value={profile.gstin}
+                    onChange={(e) => handleFieldChange('gstin', e.target.value.toUpperCase())}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400 uppercase"
+                    placeholder="Enter GSTIN"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Email ID</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <input
+                    type="email"
+                    value={profile.email}
+                    onChange={(e) => handleFieldChange('email', e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400"
+                    placeholder="Enter Email ID"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Account Books Beginning Date</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <input
+                    type="date"
+                    value={profile.account_books_date}
+                    onChange={(e) => handleFieldChange('account_books_date', e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow text-gray-700"
                   />
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* TAB 3: INVOICE DEFAULTS */}
-        {activeTab === 'invoice_defaults' && (
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-2xs space-y-6">
-            <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <FileText className="h-4 w-4" />
+            {/* Column 2 */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-[#f5f3ff] flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-[#8b5cf6]" />
+                </div>
+                <h2 className="text-base font-bold text-[#1e293b]">More Details</h2>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">Default Bill & Invoice Content</h3>
-                <p className="text-[11px] text-gray-500">
-                  Customize default terms, conditions, notes, and invoice numbering sequence.
-                </p>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Business Type</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <select
+                    value={profile.business_type}
+                    onChange={(e) => handleFieldChange('business_type', e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow text-gray-600 appearance-none"
+                  >
+                    <option value="">Select Business Type</option>
+                    {Object.keys(BUSINESS_STRUCTURE).map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Business Category</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Folder className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <select
+                    value={profile.business_category}
+                    onChange={(e) => handleFieldChange('business_category', e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow text-gray-700 appearance-none"
+                  >
+                    <option value="">Select Business Category</option>
+                    {profile.business_type ? (
+                      BUSINESS_STRUCTURE[profile.business_type]?.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))
+                    ) : (
+                      Object.entries(BUSINESS_STRUCTURE).map(([type, cats]) => (
+                        <optgroup key={type} label={type}>
+                          {cats.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">
+                  State <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Map className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <select
+                    value={profile.state}
+                    onChange={(e) => handleFieldChange('state', e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow text-gray-700 appearance-none"
+                  >
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state.code} value={state.name}>
+                        {state.name} ({state.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Pincode</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MapPin className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    value={profile.pincode}
+                    onChange={(e) => handleFieldChange('pincode', e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400"
+                    placeholder="Enter Pincode"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Invoice Number Prefix</label>
+            {/* Column 3 */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-[#f5f3ff] flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-[#8b5cf6]" />
+                </div>
+                <h2 className="text-base font-bold text-[#1e293b]">Address & Signature</h2>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Business Address</label>
+                <div className="relative">
+                  <div className="absolute top-3 left-3 flex items-start pointer-events-none">
+                    <MapPin className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={profile.address}
+                    onChange={(e) => handleFieldChange('address', e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6] transition-shadow placeholder-gray-400 resize-none"
+                    placeholder="Enter Business Address"
+                  />
+                </div>
+                <div className="text-[11px] text-gray-400 text-right">{profile.address.length} / 250</div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#475569]">Add Signature</label>
+                <div 
+                  onClick={() => signatureInputRef.current?.click()}
+                  className="w-full h-32 border border-dashed border-[#cbd5e1] bg-[#f8fafc] rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#f1f5f9] transition-colors group"
+                >
+                  {profile.signature_url ? (
+                    <img src={profile.signature_url} alt="Signature" className="h-full object-contain p-2" />
+                  ) : (
+                    <>
+                      <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center mb-2 text-[#8b5cf6] group-hover:scale-105 transition-transform">
+                        <CloudUpload className="w-5 h-5" />
+                      </div>
+                      <span className="text-[13px] font-medium text-[#334155]">Click to upload signature</span>
+                      <span className="text-[11px] text-[#94a3b8] mt-1">PNG, JPG or JPEG (Max. 1.5MB)</span>
+                    </>
+                  )}
+                </div>
                 <input
-                  type="text"
-                  placeholder="INV-"
-                  value={profile.invoice_prefix}
-                  onChange={(e) => handleFieldChange('invoice_prefix', e.target.value)}
-                  className="w-48 h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-gray-900 transition-all"
+                  type="file"
+                  ref={signatureInputRef}
+                  onChange={(e) => handleFileUpload(e, 'signature_url')}
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="hidden"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Default Terms & Conditions</label>
-                <textarea
-                  rows={4}
-                  value={profile.terms_and_conditions}
-                  onChange={(e) => handleFieldChange('terms_and_conditions', e.target.value)}
-                  placeholder="Add default terms printed on every invoice..."
-                  className="w-full p-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono"
-                />
-              </div>
+          </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Default Customer Notes</label>
-                <textarea
-                  rows={4}
-                  value={profile.notes}
-                  onChange={(e) => handleFieldChange('notes', e.target.value)}
-                  placeholder="Add default notes printed on bills..."
-                  className="w-full p-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                />
+          {/* Form Footer */}
+          <div className="border-t border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#fcfcfd] rounded-b-2xl">
+            <div className="flex items-center gap-2 text-[13px] text-[#64748b]">
+              <div className="w-6 h-6 rounded-full bg-[#f5f3ff] flex items-center justify-center">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#8b5cf6]" />
               </div>
+              Make sure all the information is correct before saving.
+            </div>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-gray-200 text-[#475569] font-semibold text-[13px] rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 sm:flex-none px-6 py-2.5 bg-[#6366f1] text-white font-semibold text-[13px] rounded-xl hover:bg-[#4f46e5] transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Save Changes
+              </button>
             </div>
           </div>
-        )}
+        </form>
 
-        {/* TAB 4: LIVE BILL PREVIEW */}
-        {activeTab === 'preview' && (
-          <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm space-y-6 max-w-3xl mx-auto font-sans">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-4">
-              <div className="flex items-center gap-4">
-                {profile.logo_url ? (
-                  <img
-                    src={profile.logo_url}
-                    alt="Company Logo"
-                    className="h-14 w-auto max-w-[120px] object-contain rounded-lg border border-gray-100 p-1 bg-white"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg">
-                    {profile.name.charAt(0) || 'B'}
-                  </div>
-                )}
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">{profile.name || 'Your Business Name'}</h2>
-                  {profile.legal_name && <p className="text-xs text-gray-500">{profile.legal_name}</p>}
-                  <p className="text-[11px] text-gray-600 mt-0.5">
-                    {profile.address_line1}, {profile.city}, {profile.state} - {profile.pincode}
-                  </p>
-                  <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono mt-0.5">
-                    {profile.gstin && <span>GSTIN: <strong>{profile.gstin}</strong></span>}
-                    {profile.pan && <span>PAN: <strong>{profile.pan}</strong></span>}
-                    {profile.phone && <span>Tel: {profile.phone}</span>}
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <h1 className="text-lg font-black tracking-wider text-gray-900 uppercase">TAX INVOICE</h1>
-                <p className="text-xs font-bold font-mono text-indigo-600 mt-0.5">{profile.invoice_prefix}2026-0001</p>
-              </div>
-            </div>
-
-            {/* Bank Details Preview Box on Bill */}
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs flex flex-col sm:flex-row justify-between gap-4">
-              <div>
-                <span className="font-bold uppercase tracking-wider text-[10px] text-gray-500 block mb-1">
-                  Bank Details for Payment
-                </span>
-                <p className="font-semibold text-gray-900">Bank: {profile.bank_name || 'HDFC Bank Ltd'}</p>
-                <p className="text-gray-700 font-mono">A/C: {profile.bank_account_number || '50200098765432'}</p>
-                <p className="text-gray-700 font-mono">IFSC: {profile.bank_ifsc || 'HDFC0001234'}</p>
-                <p className="text-gray-600">Branch: {profile.bank_branch || 'Hinjewadi, Pune'}</p>
-              </div>
-
-              {profile.upi_id && (
-                <div className="sm:text-right">
-                  <span className="font-bold uppercase tracking-wider text-[10px] text-emerald-700 block mb-1">
-                    Instant UPI Payment ID
-                  </span>
-                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 font-mono font-bold rounded-lg border border-emerald-200 text-xs inline-block">
-                    {profile.upi_id}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Bottom Save Bar */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-          <Link
-            href="/settings"
-            className="px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
-          >
-            Back to Settings
-          </Link>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            <span>Save Profile Settings</span>
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   )
 }

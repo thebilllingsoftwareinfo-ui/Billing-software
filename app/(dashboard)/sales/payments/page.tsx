@@ -19,14 +19,22 @@ export default function PaymentsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('all');
 
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     fetchPayments();
-  }, [page, search, paymentMethod]);
+  }, [page, debouncedSearch, paymentMethod]);
 
   async function fetchPayments() {
     try {

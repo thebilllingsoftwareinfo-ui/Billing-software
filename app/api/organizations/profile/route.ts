@@ -2,20 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getApiSession } from '@/lib/auth/api-session'
 import { demoGetOrganizationProfile, demoUpdateOrganizationProfile } from '@/lib/services/demo-store'
-
-function normalizeCategory(cat?: string | null): string {
-  if (!cat) return 'retail'
-  const c = cat.toLowerCase().trim()
-  if (c === 'jewelry_gold' || c === 'jewelry' || c === 'jewellery') return 'jewelry'
-  if (c === 'wholesale_distribution' || c === 'wholesale') return 'wholesale'
-  if (c === 'retail_supermarket' || c === 'retail' || c === 'general_store' || c === 'textiles_fashion' || c === 'hardware_sanitary' || c === 'electronics_mobile') return 'retail'
-  if (c === 'restaurant_cafe' || c === 'restaurant') return 'restaurant'
-  if (c === 'pharmacy_medical' || c === 'medical') return 'medical'
-  if (c === 'service_business' || c === 'services' || c === 'solar_clean_energy') return 'services'
-  if (c === 'manufacturing') return 'manufacturing'
-  if (c === 'freelancer') return 'freelancer'
-  return c
-}
+import { normalizeBusinessClassification } from '@/lib/validators/organization.schema'
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,10 +12,37 @@ export async function GET(request: NextRequest) {
       // In demo mode or public settings fetch, fallback to demo profile
       const demoData = demoGetOrganizationProfile()
       const demoCategoryCookie = request.cookies.get('demo_category')?.value
+      const demoTypeCookie = request.cookies.get('demo_business_type')?.value
       if (demoCategoryCookie) {
-        demoData.business_category = normalizeCategory(demoCategoryCookie)
-        demoData.business_type = demoCategoryCookie
+        demoData.business_category = demoCategoryCookie
       }
+      if (demoTypeCookie) {
+        demoData.business_type = demoTypeCookie
+      }
+      const normalized = normalizeBusinessClassification(demoData.business_type, demoData.business_category)
+      demoData.business_type = normalized.business_type
+      demoData.business_category = normalized.business_category
+
+      return NextResponse.json({
+        success: true,
+        data: demoData,
+      })
+    }
+
+    if (session.is_demo || session.user_id?.includes('demo')) {
+      const demoData = demoGetOrganizationProfile()
+      const demoCategoryCookie = request.cookies.get('demo_category')?.value
+      const demoTypeCookie = request.cookies.get('demo_business_type')?.value
+      if (demoCategoryCookie) {
+        demoData.business_category = demoCategoryCookie
+      }
+      if (demoTypeCookie) {
+        demoData.business_type = demoTypeCookie
+      }
+      const normalized = normalizeBusinessClassification(demoData.business_type, demoData.business_category)
+      demoData.business_type = normalized.business_type
+      demoData.business_category = normalized.business_category
+
       return NextResponse.json({
         success: true,
         data: demoData,
@@ -46,26 +60,37 @@ export async function GET(request: NextRequest) {
     if (error || !org) {
       const demoData = demoGetOrganizationProfile()
       const demoCategoryCookie = request.cookies.get('demo_category')?.value
+      const demoTypeCookie = request.cookies.get('demo_business_type')?.value
       if (demoCategoryCookie) {
-        demoData.business_category = normalizeCategory(demoCategoryCookie)
-        demoData.business_type = demoCategoryCookie
+        demoData.business_category = demoCategoryCookie
       }
+      if (demoTypeCookie) {
+        demoData.business_type = demoTypeCookie
+      }
+      const normalized = normalizeBusinessClassification(demoData.business_type, demoData.business_category)
+      demoData.business_type = normalized.business_type
+      demoData.business_category = normalized.business_category
+
       return NextResponse.json({
         success: true,
         data: demoData,
       })
     }
 
+    const normalized = normalizeBusinessClassification(org.business_type, org.business_category)
+
     const profile = {
       id: org.id,
       name: org.name || 'Your Business Name',
       legal_name: org.legal_name || org.name,
       trade_name: org.trade_name || org.name,
-      business_type: org.business_category || 'retail',
-      business_category: org.business_category || 'retail',
+      business_type: normalized.business_type,
+      business_category: normalized.business_category,
       logo_url: org.logo_url || org.organization_settings?.[0]?.logo_url || null,
+      signature_url: org.signature_url || org.organization_settings?.[0]?.signature_url || null,
       gstin: org.gstin || null,
       pan: org.pan || null,
+      account_books_date: org.account_books_date || null,
       state_code: org.state_code || '27',
       phone: org.phone || null,
       email: org.email || null,
@@ -102,14 +127,15 @@ export async function PUT(request: NextRequest) {
     const session = await getApiSession()
     const body = await request.json()
 
-    const rawCategory = body.business_category || body.business_type
-    const category = normalizeCategory(rawCategory)
+    const normalized = normalizeBusinessClassification(body.business_type, body.business_category)
+    const category = normalized.business_category
+    const type = normalized.business_type
 
     // Always update demo store in development/demo mode
     const updatedDemo = demoUpdateOrganizationProfile({
       ...body,
       business_category: category,
-      business_type: rawCategory || category,
+      business_type: type,
     })
 
     if (session && !session.user_id.includes('demo')) {
@@ -122,21 +148,30 @@ export async function PUT(request: NextRequest) {
             legal_name: body.legal_name || null,
             trade_name: body.trade_name || null,
             business_category: category,
+            business_type: type,
             logo_url: body.logo_url || null,
+            signature_url: body.signature_url || null,
             gstin: body.gstin || null,
             pan: body.pan || null,
             phone: body.phone || null,
             email: body.email || null,
             website: body.website || null,
             address: body.address_line1 || null,
+            state: body.state || null,
+            pincode: body.pincode || null,
             state_code: body.state_code || null,
             invoice_prefix: body.invoice_prefix || 'INV-',
+            account_books_date: body.account_books_date || null,
           })
           .eq('id', session.organization_id)
       } catch (dbErr) {
         console.warn('[Organization Profile PUT API] Database update warning:', dbErr)
       }
     }
+
+    // Invalidate the cache for the layout so the sidebar updates
+    const { revalidatePath } = require('next/cache')
+    revalidatePath('/', 'layout')
 
     const res = NextResponse.json({
       success: true,
@@ -146,6 +181,18 @@ export async function PUT(request: NextRequest) {
 
     // Set cookie so server components immediately pick up the category change
     res.cookies.set('demo_category', category, {
+      path: '/',
+      maxAge: 30 * 86400,
+      sameSite: 'lax',
+    })
+
+    res.cookies.set('demo_business_type', type, {
+      path: '/',
+      maxAge: 30 * 86400,
+      sameSite: 'lax',
+    })
+    
+    res.cookies.set('demo_org_name', body.name, {
       path: '/',
       maxAge: 30 * 86400,
       sameSite: 'lax',

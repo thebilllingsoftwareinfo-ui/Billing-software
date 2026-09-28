@@ -25,6 +25,16 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 })
     }
 
+    if (session.user_id.includes('demo') || !isValidUUID(id)) {
+      const demoData = demoGetProduct(id)
+      if (demoData) {
+        return NextResponse.json({
+          success: true,
+          data: demoData,
+        })
+      }
+    }
+
     const supabase = await createClient()
 
     // Fetch product details with category & unit joins
@@ -36,31 +46,11 @@ export async function GET(
       .single()
 
     if (productError || !product) {
-      if (session.user_id.includes('demo')) {
-        const demoData = demoGetProduct(id)
-        if (demoData) {
-          return NextResponse.json({
-            success: true,
-            data: demoData,
-          })
-        }
+      const demoData = demoGetProduct(id)
+      if (demoData) {
         return NextResponse.json({
           success: true,
-          data: {
-            product: {
-              id,
-              name: 'Demo Product',
-              sku: 'SKU-DEMO',
-              sale_price: 699,
-              purchase_price: 500,
-              gst_rate: 18,
-              current_stock: 10,
-              min_stock_level: 5,
-              is_active: true,
-              organization_id: session.organization_id,
-            },
-            movements: [],
-          },
+          data: demoData,
         })
       }
       return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 })

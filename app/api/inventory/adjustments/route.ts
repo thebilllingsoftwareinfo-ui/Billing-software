@@ -55,10 +55,40 @@ export async function POST(request: NextRequest) {
     const parsed = stockAdjustmentSchema.safeParse(body)
 
     if (!parsed.success) {
+      const fieldErrors = parsed.error.flatten().fieldErrors
+      const firstErr =
+        fieldErrors.quantity?.[0] ||
+        fieldErrors.product_id?.[0] ||
+        fieldErrors.reason?.[0] ||
+        fieldErrors.direction?.[0] ||
+        parsed.error.issues?.[0]?.message ||
+        'Invalid stock adjustment data'
       return NextResponse.json(
-        { success: false, error: 'Invalid stock adjustment data', details: parsed.error.flatten() },
+        { success: false, error: firstErr, details: parsed.error.flatten() },
         { status: 400 }
       )
+    }
+
+
+
+    let itemsToProcess = parsed.data.items
+    if (!itemsToProcess || itemsToProcess.length === 0) {
+      if (parsed.data.product_id) {
+        itemsToProcess = [
+          {
+            product_id: parsed.data.product_id,
+            direction: parsed.data.direction,
+            quantity: parsed.data.quantity,
+            unit: parsed.data.unit,
+            notes: parsed.data.notes,
+          },
+        ]
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'At least one item or product_id is required' },
+          { status: 400 }
+        )
+      }
     }
 
     if (session.user_id.includes('demo')) {
@@ -68,7 +98,7 @@ export async function POST(request: NextRequest) {
           id: `adj-demo-${Date.now()}`,
           reason: parsed.data.reason,
           notes: parsed.data.notes,
-          items: parsed.data.items,
+          items: itemsToProcess,
         },
       })
     }
@@ -78,15 +108,17 @@ export async function POST(request: NextRequest) {
       user_id: session.user_id,
       reason: parsed.data.reason,
       notes: parsed.data.notes,
-      items: parsed.data.items,
+      items: itemsToProcess,
     })
 
     return NextResponse.json({ success: true, data: result })
   } catch (err: any) {
     console.error('[Stock Adjustments POST API] Error:', err)
+    const status = err.message?.includes('not found') ? 404 : 400
     return NextResponse.json(
       { success: false, error: err.message || 'Failed to process stock adjustment' },
-      { status: 400 }
+      { status }
     )
   }
 }
+

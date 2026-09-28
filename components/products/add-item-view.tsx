@@ -27,6 +27,8 @@ import { VALID_GST_RATES } from '@/lib/validators/product.schema'
 import { STANDARD_UNITS } from '@/lib/services/unit.service'
 import { generateEan13Barcode, generateCode128Barcode, generateBarcodeSvg } from '@/lib/services/barcode.service'
 import { STANDARD_GST_RATES, TaxTreatment } from '@/lib/services/tax.service'
+import { useCategoryConfig } from '@/lib/hooks/useCategoryConfig'
+import { BusinessCategoryService } from '@/lib/services/business-category.service'
 
 export interface AddItemViewProps {
   initialData?: any
@@ -108,8 +110,64 @@ export function AddItemView({ initialData, onClose, onSuccess }: AddItemViewProp
   const [tempBaseUnit, setTempBaseUnit] = useState('None')
   const [tempSecondaryUnit, setTempSecondaryUnit] = useState('None')
 
-  // 4. Active Tab: 'pricing' | 'stock'
-  const [activeTab, setActiveTab] = useState<'pricing' | 'stock'>('pricing')
+  // 4. Active Tab: 'pricing' | 'stock' | 'specs'
+  const [activeTab, setActiveTab] = useState<'pricing' | 'stock' | 'specs'>('pricing')
+
+  const categoryConfig = useCategoryConfig()
+
+  // Category-specific adaptive fields
+  // A. Jewellery Fields
+  const [metalType, setMetalType] = useState(initialData?.metal_type || 'Gold')
+  const [purity, setPurity] = useState(initialData?.purity || '22K (91.6%)')
+  const [carat, setCarat] = useState<number | ''>(initialData?.carat !== undefined ? Number(initialData.carat) : '')
+  const [grossWeight, setGrossWeight] = useState<number | ''>(initialData?.gross_weight !== undefined ? Number(initialData.gross_weight) : '')
+  const [stoneWeight, setStoneWeight] = useState<number | ''>(initialData?.stone_weight !== undefined ? Number(initialData.stone_weight) : '')
+  const [stoneValue, setStoneValue] = useState<number | ''>(initialData?.stone_value !== undefined ? Number(initialData.stone_value) : '')
+  const [makingCharge, setMakingCharge] = useState<number | ''>(initialData?.making_charge !== undefined ? Number(initialData.making_charge) : '')
+  const [makingChargeType, setMakingChargeType] = useState<'per_gram' | 'fixed' | 'percentage'>(initialData?.making_charge_type || 'per_gram')
+  const [wastage, setWastage] = useState<number | ''>(initialData?.wastage !== undefined ? Number(initialData.wastage) : '')
+  const [wastageType, setWastageType] = useState<'percentage' | 'grams'>(initialData?.wastage_type || 'percentage')
+  const [otherCharges, setOtherCharges] = useState<number | ''>(initialData?.other_charges !== undefined ? Number(initialData.other_charges) : '')
+  const [hallmarkHuid, setHallmarkHuid] = useState(initialData?.hallmark_huid || '')
+  const [isLivePrice, setIsLivePrice] = useState(initialData?.is_live_price || false)
+  const [bullionRate, setBullionRate] = useState<number>(7200)
+
+  // B. Pharmacy / FMCG Fields
+  const [batchNo, setBatchNo] = useState(initialData?.metadata?.batch_no || '')
+  const [expiryDate, setExpiryDate] = useState(initialData?.metadata?.expiry_date || '')
+  const [composition, setComposition] = useState(initialData?.metadata?.composition || '')
+  const [mrp, setMrp] = useState<number | ''>(initialData?.metadata?.mrp !== undefined ? Number(initialData.metadata.mrp) : '')
+
+  // C. Apparel & Footwear Fields
+  const [apparelSize, setApparelSize] = useState(initialData?.metadata?.size || '')
+  const [apparelColor, setApparelColor] = useState(initialData?.metadata?.color || '')
+  const [apparelBrand, setApparelBrand] = useState(initialData?.metadata?.brand || '')
+
+  // D. Serial / Electronics / Auto
+  const [serialNo, setSerialNo] = useState(initialData?.metadata?.serial_no || '')
+  const [modelNo, setModelNo] = useState(initialData?.metadata?.model_no || '')
+  const [warrantyMonths, setWarrantyMonths] = useState<number | ''>(initialData?.metadata?.warranty_months !== undefined ? Number(initialData.metadata.warranty_months) : '')
+
+  const netWeight = Math.max(0, (Number(grossWeight) || 0) - (Number(stoneWeight) || 0))
+
+  const handleRecalculateJewelleryPrice = () => {
+    const calc = BusinessCategoryService.calculateJewelleryItem({
+      grossWeight: Number(grossWeight) || 0,
+      stoneWeight: Number(stoneWeight) || 0,
+      metalRatePerGram: bullionRate,
+      purityFactor: purity.includes('24K') ? 1 : purity.includes('22K') ? 0.916 : purity.includes('18K') ? 0.75 : 1,
+      wastage: Number(wastage) || 0,
+      wastageType: wastageType,
+      makingCharge: Number(makingCharge) || 0,
+      makingChargeType: makingChargeType,
+      stoneValue: Number(stoneValue) || 0,
+      otherCharges: Number(otherCharges) || 0,
+      gstRate: 3,
+    })
+
+    setSalePrice(calc.finalAmount)
+    toast.success(`Calculated price ₹${calc.finalAmount} (Net Wt: ${calc.netWeight}g, Metal: ₹${calc.metalValue}, Making: ₹${calc.makingChargesAmount})`)
+  }
 
   // 5. Pricing Tab Fields
   const [salePrice, setSalePrice] = useState<number | ''>(
@@ -310,6 +368,32 @@ export function AddItemView({ initialData, onClose, onSuccess }: AddItemViewProp
       purchase_unit: selectedUnit && selectedUnit !== 'None' ? selectedUnit : 'PCS',
       sales_unit: selectedUnit && selectedUnit !== 'None' ? selectedUnit : 'PCS',
       decimals_allowed: false,
+      metal_type: metalType,
+      purity: purity,
+      carat: carat === '' ? null : Number(carat),
+      gross_weight: grossWeight === '' ? null : Number(grossWeight),
+      net_weight: netWeight,
+      stone_weight: stoneWeight === '' ? null : Number(stoneWeight),
+      stone_value: stoneValue === '' ? null : Number(stoneValue),
+      making_charge: makingCharge === '' ? null : Number(makingCharge),
+      making_charge_type: makingChargeType,
+      wastage: wastage === '' ? null : Number(wastage),
+      wastage_type: wastageType,
+      other_charges: otherCharges === '' ? null : Number(otherCharges),
+      hallmark_huid: hallmarkHuid.trim() || null,
+      is_live_price: isLivePrice,
+      metadata: {
+        batch_no: batchNo.trim() || undefined,
+        expiry_date: expiryDate.trim() || undefined,
+        composition: composition.trim() || undefined,
+        mrp: mrp === '' ? undefined : Number(mrp),
+        size: apparelSize.trim() || undefined,
+        color: apparelColor.trim() || undefined,
+        brand: apparelBrand.trim() || undefined,
+        serial_no: serialNo.trim() || undefined,
+        model_no: modelNo.trim() || undefined,
+        warranty_months: warrantyMonths === '' ? undefined : Number(warrantyMonths),
+      },
       description: location ? `Location: ${location}` : '',
     }
 
@@ -711,6 +795,20 @@ export function AddItemView({ initialData, onClose, onSuccess }: AddItemViewProp
             Stock
           </button>
         )}
+
+        {/* Dynamic Category Specifications Tab */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('specs')}
+          className={`pb-2.5 font-bold transition-all relative cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'specs'
+              ? 'text-rose-600 border-b-2 border-rose-600'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+          <span>Category Specs ({categoryConfig?.name || selectedCategory})</span>
+        </button>
       </div>
 
       {/* ── TAB CONTENT AREA ─────────────────────────────────── */}
@@ -963,6 +1061,68 @@ export function AddItemView({ initialData, onClose, onSuccess }: AddItemViewProp
                 </div>
               </div>
             </div>
+
+            {/* Card 3: Opening Stock & Inventory (Directly visible on Pricing tab for Goods) */}
+            {productType === 'goods' && (
+              <div className="bg-[#f8f9fa] border border-blue-200/80 p-5 rounded-2xl space-y-3.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-gray-900">Initial Stock & Inventory (Opening Quantity)</h3>
+                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded">
+                      Live Stock Tracking
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('stock')}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                  >
+                    Rack & Date Settings →
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Opening Quantity ({selectedUnit || 'PCS'})
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 50"
+                      value={openingStock}
+                      onChange={(e) => setOpeningStock(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      At Purchase Price (₹ / unit)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 100"
+                      value={atPrice !== '' ? atPrice : purchasePrice}
+                      onChange={(e) => setAtPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Min Stock Alert (Low Stock Warning)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="5"
+                      value={minStockAlert}
+                      onChange={(e) => setMinStockAlert(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono text-gray-900 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -1033,6 +1193,344 @@ export function AddItemView({ initialData, onClose, onSuccess }: AddItemViewProp
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-900 focus:outline-none focus:border-blue-500"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: CATEGORY SPECIFICATIONS (Jewellery, Pharmacy, Apparel, Auto) ── */}
+        {activeTab === 'specs' && (
+          <div className="space-y-5">
+            {/* Jewellery Specific Card */}
+            {(categoryConfig?.id === 'jewellery' || categoryConfig?.id === 'jewelry' || selectedCategory?.toLowerCase().includes('jewel')) && (
+              <div className="bg-amber-50/40 border border-amber-200/80 p-5 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-600" />
+                    <h3 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                      Jewellery Precious Metal & Ornament Specifications
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                    Category: Jewellery (3% GST)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Metal Type */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Metal Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={metalType}
+                      onChange={(e) => setMetalType(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900"
+                    >
+                      <option value="Gold">Gold</option>
+                      <option value="Silver">Silver</option>
+                      <option value="Platinum">Platinum</option>
+                      <option value="Diamond">Diamond</option>
+                      <option value="Other">Other Metal</option>
+                    </select>
+                  </div>
+
+                  {/* Purity */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Purity / Karat <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={purity}
+                      onChange={(e) => setPurity(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900"
+                    >
+                      <option value="24K (99.9%)">24K (99.9% Pure)</option>
+                      <option value="22K (91.6%)">22K (91.6% Hallmark 916)</option>
+                      <option value="18K (75.0%)">18K (75.0% Hallmark 750)</option>
+                      <option value="14K (58.5%)">14K (58.5% Hallmark 585)</option>
+                      <option value="925 Sterling">925 Sterling Silver</option>
+                      <option value="999 Pure Silver">999 Fine Silver</option>
+                    </select>
+                  </div>
+
+                  {/* Carat */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Carat Rating (ct)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 22 or 1.5 ct"
+                      value={carat}
+                      onChange={(e) => setCarat(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-900"
+                    />
+                  </div>
+
+                  {/* Hallmark / HUID Code */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Hallmark / HUID Ref No
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. HUID-882910"
+                      value={hallmarkHuid}
+                      onChange={(e) => setHallmarkHuid(e.target.value.toUpperCase())}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold uppercase text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Weight Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 bg-white border border-amber-200/70 rounded-xl">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-800 mb-1">
+                      Gross Weight (Grams) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={grossWeight}
+                      onChange={(e) => setGrossWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-800 mb-1">
+                      Stone Weight (Grams / Carat)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={stoneWeight}
+                      onChange={(e) => setStoneWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-1">
+                      Net Metal Weight (Calculated)
+                    </label>
+                    <div className="w-full px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg text-xs font-mono font-black text-amber-950">
+                      {netWeight.toFixed(3)} Grams
+                    </div>
+                  </div>
+                </div>
+
+                {/* Making, Wastage, Stones */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Stone Value (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={stoneValue}
+                      onChange={(e) => setStoneValue(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Making Charges
+                    </label>
+                    <div className="flex">
+                      <input
+                        type="number"
+                        placeholder="e.g. 450"
+                        value={makingCharge}
+                        onChange={(e) => setMakingCharge(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-24 px-2 py-2 bg-white border border-gray-300 rounded-l-lg text-xs font-mono font-bold text-gray-900"
+                      />
+                      <select
+                        value={makingChargeType}
+                        onChange={(e: any) => setMakingChargeType(e.target.value)}
+                        className="px-2 py-2 bg-slate-100 border-y border-r border-gray-300 rounded-r-lg text-[11px] font-bold"
+                      >
+                        <option value="per_gram">/ Gram</option>
+                        <option value="fixed">Fixed ₹</option>
+                        <option value="percentage">%</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      Wastage
+                    </label>
+                    <div className="flex">
+                      <input
+                        type="number"
+                        placeholder="e.g. 5"
+                        value={wastage}
+                        onChange={(e) => setWastage(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-24 px-2 py-2 bg-white border border-gray-300 rounded-l-lg text-xs font-mono font-bold text-gray-900"
+                      />
+                      <select
+                        value={wastageType}
+                        onChange={(e: any) => setWastageType(e.target.value)}
+                        className="px-2 py-2 bg-slate-100 border-y border-r border-gray-300 rounded-r-lg text-[11px] font-bold"
+                      >
+                        <option value="percentage">% Wt</option>
+                        <option value="grams">Grams</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">Other Charges (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={otherCharges}
+                      onChange={(e) => setOtherCharges(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Calculation & Pricing Action */}
+                <div className="p-3.5 bg-amber-100/70 border border-amber-300/80 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-bold text-amber-950">Metal Rate (₹/g):</span>
+                    <input
+                      type="number"
+                      value={bullionRate}
+                      onChange={(e) => setBullionRate(Number(e.target.value))}
+                      className="w-24 px-2.5 py-1 bg-white border border-amber-300 rounded text-xs font-mono font-bold text-gray-900"
+                    />
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={isLivePrice}
+                        onChange={(e) => setIsLivePrice(e.target.checked)}
+                        className="rounded text-amber-600 focus:ring-0"
+                      />
+                      <span>Live Rate Tracking</span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRecalculateJewelleryPrice}
+                    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
+                  >
+                    ⚡ Calculate & Update Selling Price
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Pharmacy / FMCG Card */}
+            <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+              <h3 className="text-xs font-bold text-gray-900 pb-1.5 border-b border-gray-200">
+                Batch, Expiry & Pharmaceutical Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Batch Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. BAT-2026-X"
+                    value={batchNo}
+                    onChange={(e) => setBatchNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Expiry Date (MM/YY)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 12/28"
+                    value={expiryDate}
+                    onChange={(e) => setExpiryDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Composition / Salt</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paracetamol 500mg"
+                    value={composition}
+                    onChange={(e) => setComposition(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Maximum Retail Price (MRP ₹)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={mrp}
+                    onChange={(e) => setMrp(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Apparel & Serial Details Card */}
+            <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+              <h3 className="text-xs font-bold text-gray-900 pb-1.5 border-b border-gray-200">
+                Apparel Size & Electronics Serial Specifications
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Size</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. L, XL, 32"
+                    value={apparelSize}
+                    onChange={(e) => setApparelSize(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Color / Shade</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Navy Blue"
+                    value={apparelColor}
+                    onChange={(e) => setApparelColor(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Brand</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Raymond"
+                    value={apparelBrand}
+                    onChange={(e) => setApparelBrand(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Serial / IMEI No</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. SN-882910"
+                    value={serialNo}
+                    onChange={(e) => setSerialNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1">Warranty (Months)</label>
+                  <input
+                    type="number"
+                    placeholder="12"
+                    value={warrantyMonths}
+                    onChange={(e) => setWarrantyMonths(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold"
+                  />
+                </div>
               </div>
             </div>
           </div>

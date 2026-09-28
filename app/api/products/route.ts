@@ -28,6 +28,24 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '15', 10)
     const offset = (page - 1) * limit
 
+    if (session.user_id?.includes('demo') || (session as any).is_demo) {
+      const demoResult = demoGetProducts({
+        q,
+        category_id,
+        status,
+        stock_status,
+        sort,
+        page,
+        limit,
+      })
+      return NextResponse.json({
+        success: true,
+        data: demoResult.products,
+        pagination: demoResult.pagination,
+        summary: demoResult.summary,
+      })
+    }
+
     const supabase = await createClient()
 
     let query = supabase
@@ -163,6 +181,18 @@ export async function POST(request: NextRequest) {
     }
 
     const v = parsed.data
+
+    if (session.user_id?.includes('demo') || (session as any).is_demo) {
+      const demoProduct = demoAddProduct({
+        ...v,
+        organization_id: session.organization_id,
+      })
+      return NextResponse.json({
+        success: true,
+        data: demoProduct,
+      }, { status: 201 })
+    }
+
     const supabase = await createClient()
 
     // Check organization-scoped SKU uniqueness
@@ -210,6 +240,15 @@ export async function POST(request: NextRequest) {
         metal_type: v.metal_type || null,
         metal_weight: v.metal_weight || null,
         is_live_price: v.is_live_price || false,
+        purity: v.purity || null,
+        gross_weight: v.gross_weight || null,
+        net_weight: v.net_weight || null,
+        stone_weight: v.stone_weight || null,
+        stone_value: v.stone_value || null,
+        wastage_pct: v.wastage_pct || null,
+        making_charge: v.making_charge || null,
+        making_charge_type: v.making_charge_type || null,
+        custom_fields: v.custom_fields || {},
         created_by: session.user_id,
       })
       .select()
@@ -286,6 +325,18 @@ export async function PUT(request: NextRequest) {
         gst_rate: patch.gst_rate,
         min_stock_level: patch.min_stock_level,
         description: patch.description || null,
+        metal_type: patch.metal_type || null,
+        metal_weight: patch.metal_weight || null,
+        is_live_price: patch.is_live_price || false,
+        purity: patch.purity || null,
+        gross_weight: patch.gross_weight || null,
+        net_weight: patch.net_weight || null,
+        stone_weight: patch.stone_weight || null,
+        stone_value: patch.stone_value || null,
+        wastage_pct: patch.wastage_pct || null,
+        making_charge: patch.making_charge || null,
+        making_charge_type: patch.making_charge_type || null,
+        custom_fields: patch.custom_fields || {},
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

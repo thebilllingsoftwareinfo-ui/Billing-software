@@ -4,24 +4,102 @@
 
 import { z } from 'zod'
 
-export const BUSINESS_CATEGORIES = [
-  { value: 'retail', label: 'Retail / Shop', emoji: '🛒', description: 'General merchandise, clothing, electronics, FMCG' },
-  { value: 'wholesale', label: 'Wholesale / Distribution', emoji: '🏭', description: 'Bulk supply, dealer network, B2B distribution' },
-  { value: 'services', label: 'Services / Consulting', emoji: '💼', description: 'Professional services, agencies, advisory' },
-  { value: 'manufacturing', label: 'Manufacturing', emoji: '⚙️', description: 'Production, assembly, raw material processing' },
-  { value: 'restaurant', label: 'Restaurant / F&B', emoji: '🍽️', description: 'Restaurant, café, cloud kitchen, catering' },
-  { value: 'freelancer', label: 'Freelancer / Solo', emoji: '🧑‍💻', description: 'Independent contractors, solo practitioners' },
-  { value: 'jewelry', label: 'Jewellery Store', emoji: '💍', description: 'Gold, silver, diamond jewellery, hallmarking' },
-  { value: 'medical', label: 'Medical / Pharmacy', emoji: '💊', description: 'Pharmacy, clinic, medical supply, diagnostics' },
-] as const
+export const BUSINESS_STRUCTURE: Record<string, string[]> = {
+  'Retail': [
+    'Grocery/Kirana', 'Supermarket', 'Departmental Store', 'Clothing', 'Footwear', 
+    'Mobile', 'Electronics', 'Electrical', 'Hardware', 'Furniture', 'Bookstore', 
+    'Stationery', 'Optical', 'Jewellery', 'Pharmacy', 'Bakery', 'Sweet Shop', 'Ice Cream'
+  ],
+  'Food & Hospitality': [
+    'Restaurant', 'Café', 'Hotel', 'Bar', 'Bakery', 'Catering', 'Cloud Kitchen'
+  ],
+  'Manufacturing': [
+    'General Manufacturing', 'Food Manufacturing', 'Textile', 'Furniture', 'Pharmaceutical', 'Cosmetics'
+  ],
+  'Wholesale & Distribution': [
+    'General Wholesale', 'FMCG Distributor', 'Pharmaceutical Distributor', 'Electrical Distributor', 'Hardware Distributor', 'Textile Distributor'
+  ],
+  'Services': [
+    'Salon & Spa', 'Gym/Fitness', 'Photography', 'Repair Service', 'Consultancy', 'IT Services', 'Advertising', 'Architecture', 'Interior Design', 'Legal', 'Accounting/CA'
+  ],
+  'Healthcare': [
+    'Pharmacy', 'Clinic', 'Hospital', 'Medical Distributor', 'Diagnostic Centre'
+  ],
+  'Automobile': [
+    'Automobile Dealer', 'Auto Parts', 'Garage/Workshop', 'Car Wash'
+  ],
+  'Construction': [
+    'Construction Contractor', 'Building Materials', 'Hardware', 'Electrical & Plumbing', 'Interior Works'
+  ],
+  'Transport & Logistics': [
+    'Transport', 'Logistics', 'Courier', 'Fleet/Vehicle'
+  ],
+  'Other': [
+    'Education', 'Printing', 'Agriculture', 'Dairy', 'Timber', 'Event Management', 'Other'
+  ]
+};
+
+export const BUSINESS_CATEGORIES = []
 
 export type BusinessCategoryValue = typeof BUSINESS_CATEGORIES[number]['value']
 
+export function normalizeBusinessClassification(rawType?: string | null, rawCategory?: string | null): {
+  business_type: string
+  business_category: string
+} {
+  const cleanType = (rawType || '').trim()
+  const cleanCat = (rawCategory || '').trim()
+
+  // 1. Try matching category against BUSINESS_STRUCTURE
+  if (cleanCat) {
+    for (const [typeKey, cats] of Object.entries(BUSINESS_STRUCTURE)) {
+      const matchedCat = cats.find(c => c.toLowerCase() === cleanCat.toLowerCase())
+      if (matchedCat) {
+        // If cleanType is also valid and is this type, or even if cleanType was empty/mismatched
+        return {
+          business_type: typeKey,
+          business_category: matchedCat,
+        }
+      }
+    }
+  }
+
+  // 2. Try matching type directly against BUSINESS_STRUCTURE keys
+  if (cleanType) {
+    const matchedTypeKey = Object.keys(BUSINESS_STRUCTURE).find(
+      k => k.toLowerCase() === cleanType.toLowerCase()
+    )
+    if (matchedTypeKey) {
+      const cats = BUSINESS_STRUCTURE[matchedTypeKey]
+      const matchedCat = cleanCat ? cats.find(c => c.toLowerCase() === cleanCat.toLowerCase()) : undefined
+      return {
+        business_type: matchedTypeKey,
+        business_category: matchedCat || cats[0] || '',
+      }
+    }
+
+    // 3. Maybe cleanType is actually a category name (e.g. "Restaurant" passed as business_type)
+    for (const [typeKey, cats] of Object.entries(BUSINESS_STRUCTURE)) {
+      const matchedCat = cats.find(c => c.toLowerCase() === cleanType.toLowerCase())
+      if (matchedCat) {
+        return {
+          business_type: typeKey,
+          business_category: matchedCat,
+        }
+      }
+    }
+  }
+
+  // 4. Default fallback
+  return {
+    business_type: 'Retail',
+    business_category: 'Grocery/Kirana',
+  }
+}
+
 export const organizationSetupSchema = z.object({
-  business_category: z.enum(
-    ['retail', 'wholesale', 'services', 'manufacturing', 'restaurant', 'freelancer', 'jewelry', 'medical'],
-    { message: 'Please select a business category' }
-  ),
+  business_category: z.string().min(1, 'Please select a business category'),
+  business_type: z.string().optional(),
   name: z
     .string()
     .min(1, 'Business name is required')

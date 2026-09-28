@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 
 export type Plan = {
   id: string
@@ -32,6 +33,39 @@ export async function getSubscriptionStatus(): Promise<{
   isExpired: boolean
   daysRemaining: number
 }> {
+  // If demo mode is active, return active demo subscription immediately without remote network round-trips
+  try {
+    const cookieStore = await cookies()
+    if (cookieStore.get('demo_auth')?.value === 'true') {
+      return {
+        subscription: {
+          id: 'sub-demo-enterprise',
+          user_id: 'usr-owner-demo-1111',
+          plan_id: 'plan-enterprise',
+          status: 'active',
+          start_date: new Date().toISOString(),
+          expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          purchased_price: 999900,
+          currency: 'INR',
+          plans: {
+            id: 'plan-enterprise',
+            plan_name: 'Enterprise / Vyapar Unlimited',
+            plan_code: 'ENTERPRISE',
+            duration_days: 365,
+            price_paise: 999900,
+            currency: 'INR',
+            is_active: true,
+          },
+        },
+        isActive: true,
+        isExpired: false,
+        daysRemaining: 365,
+      }
+    }
+  } catch {
+    // In edge or test environments where cookies() isn't available, proceed to supabase client
+  }
+
   const supabase = await createClient()
 
   // 1. Get current user

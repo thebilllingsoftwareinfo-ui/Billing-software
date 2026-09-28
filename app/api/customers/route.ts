@@ -27,6 +27,16 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '15', 10)
     const offset = (page - 1) * limit
 
+    if (session.is_demo || session.user_id.includes('demo')) {
+      const demoResult = demoGetCustomers({ q, status, sort, page, limit })
+      return NextResponse.json({
+        success: true,
+        data: demoResult.customers,
+        pagination: demoResult.pagination,
+        summary: demoResult.summary,
+      })
+    }
+
     const supabase = await createClient()
 
     let query = supabase
@@ -121,6 +131,15 @@ export async function POST(request: NextRequest) {
     }
 
     const v = parsed.data
+
+    if (session.is_demo || session.user_id.includes('demo')) {
+      const demoCust = demoAddCustomer({ ...v, organization_id: session.organization_id })
+      return NextResponse.json({
+        success: true,
+        data: demoCust,
+      }, { status: 201 })
+    }
+
     const supabase = await createClient()
 
     // Insert customer row

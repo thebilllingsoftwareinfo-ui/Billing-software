@@ -23,12 +23,7 @@ export async function GET(request: NextRequest) {
     } catch {
       return NextResponse.json({
         success: true,
-        data: {
-          customers: [],
-          products: [],
-          invoices: [],
-          quotations: [],
-        },
+        data: [],
       })
     }
   } catch (err) {

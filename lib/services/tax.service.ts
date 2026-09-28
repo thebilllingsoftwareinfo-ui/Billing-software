@@ -278,7 +278,11 @@ export function calculateCentralGst(input: {
       // Taxable Value = (Gross Amount after Discount * 100) / (100 + GST Rate + Cess Rate)
       const combinedRate = effectiveGstRate + cessRate
       taxable = Math.round(((afterDisc * 100) / (100 + combinedRate)) * 100) / 100
-      gstTax = Math.round((taxable * (effectiveGstRate / 100)) * 100) / 100
+      // In accordance with Tax-Inclusive Invoice Rules:
+      // GST = Inclusive Price (after discount) - Taxable Value
+      gstTax = cessRate > 0
+        ? Math.round(((afterDisc - taxable) * (effectiveGstRate / combinedRate)) * 100) / 100
+        : Math.round((afterDisc - taxable) * 100) / 100
     } else {
       taxable = Math.round(afterDisc * 100) / 100
       gstTax = Math.round((taxable * (effectiveGstRate / 100)) * 100) / 100
@@ -441,6 +445,7 @@ export function calculateCentralGst(input: {
  * Legacy compatibility functions for existing callers
  */
 export function calculateLineTax(item: any) {
+  const price = Number(item.unit_price ?? (item.unit_price_paise !== undefined ? item.unit_price_paise / 100 : 0));
   const calc = calculateCentralGst({
     seller: { state_code: '27', is_gst_registered: true },
     buyer: { state_code: item.is_inter_state ? '07' : '27', is_gst_registered: true },
@@ -448,8 +453,8 @@ export function calculateLineTax(item: any) {
       {
         description: 'Item',
         quantity: item.quantity,
-        unit_price: (item.unit_price_paise || 0) / 100,
-        discount_percent: item.discount_pct || 0,
+        unit_price: price,
+        discount_percent: item.discount_pct || item.discount_percent || 0,
         gst_rate: item.gst_rate || 0,
         is_gst_inclusive: item.gst_type === 'inclusive',
       },
@@ -458,6 +463,9 @@ export function calculateLineTax(item: any) {
 
   const l = calc.lines[0]
   return {
+    subtotal: l.gross_amount,
+    taxable_amount: l.taxable_amount,
+    total_amount: l.line_total,
     line_subtotal_paise: Math.round(l.gross_amount * 100),
     discount_paise: Math.round(l.discount_amount * 100),
     taxable_paise: Math.round(l.taxable_amount * 100),
@@ -468,22 +476,30 @@ export function calculateLineTax(item: any) {
   }
 }
 
-export function calculateInvoiceTotals(lineItems: any[], invoiceDiscountPaise: number = 0) {
+export function calculateInvoiceTotals(lineItems: any[], invoiceDiscountPaise: number = 0, invoiceDiscountAmount?: number) {
+  const discountVal = invoiceDiscountAmount !== undefined ? invoiceDiscountAmount : invoiceDiscountPaise / 100;
   const calc = calculateCentralGst({
     seller: { state_code: '27', is_gst_registered: true },
     buyer: { state_code: lineItems[0]?.is_inter_state ? '07' : '27', is_gst_registered: true },
     items: lineItems.map((it) => ({
       description: 'Item',
       quantity: it.quantity,
-      unit_price: (it.unit_price_paise || 0) / 100,
-      discount_percent: it.discount_pct || 0,
+      unit_price: Number(it.unit_price ?? (it.unit_price_paise !== undefined ? it.unit_price_paise / 100 : 0)),
+      discount_percent: it.discount_pct || it.discount_percent || 0,
       gst_rate: it.gst_rate || 0,
       is_gst_inclusive: it.gst_type === 'inclusive',
     })),
-    invoice_discount_value: invoiceDiscountPaise / 100,
+    invoice_discount_value: discountVal,
   })
 
   return {
+    subtotal: calc.subtotal,
+    discount_amount: calc.total_discount_amount,
+    taxable_amount: calc.taxable_amount,
+    cgst_amount: calc.cgst_amount,
+    sgst_amount: calc.sgst_amount,
+    igst_amount: calc.igst_amount,
+    total_amount: calc.grand_total,
     subtotal_paise: Math.round(calc.subtotal * 100),
     discount_paise: Math.round(calc.total_discount_amount * 100),
     taxable_paise: Math.round(calc.taxable_amount * 100),
@@ -500,6 +516,8 @@ export function formatGstRate(rate: number): string {
 }
 
 export class TaxService {
+  static calculateCentralGst = calculateCentralGst
+
   static calculateLineItemsTax(input: {
     sellerStateCode: string;
     buyerStateCode: string;
@@ -509,7 +527,8 @@ export class TaxService {
       productId?: string;
       description: string;
       quantity: number;
-      unitPricePaise: number;
+      unitPrice?: number;
+      unitPricePaise?: number;
       discountPct?: number;
       hsnSac?: string;
       gstRate: number;
@@ -519,18 +538,32 @@ export class TaxService {
     const calc = calculateCentralGst({
       seller: { state_code: input.sellerStateCode, is_gst_registered: true },
       buyer: { state_code: input.buyerStateCode, is_gst_registered: true },
-      items: input.items.map((it) => ({
-        description: it.description,
-        quantity: it.quantity,
-        unit_price: (it.unitPricePaise || 0) / 100,
-        discount_percent: it.discountPct || 0,
-        gst_rate: it.gstRate || 0,
-        hsn_code: it.hsnSac,
-        is_gst_inclusive: it.gstType === 'inclusive',
-      })),
+      items: input.items.map((it) => {
+        const price = it.unitPrice !== undefined ? it.unitPrice : (it.unitPricePaise || 0) / 100;
+        return {
+          description: it.description,
+          quantity: it.quantity,
+          unit_price: price,
+          discount_percent: it.discountPct || 0,
+          gst_rate: it.gstRate || 0,
+          hsn_code: it.hsnSac,
+          is_gst_inclusive: it.gstType === 'inclusive',
+        };
+      }),
     });
 
     return {
+      // Authoritative decimal Rupees
+      subtotal: calc.subtotal,
+      discount_amount: calc.total_discount_amount,
+      taxable_amount: calc.taxable_amount,
+      cgst_amount: calc.cgst_amount,
+      sgst_amount: calc.sgst_amount,
+      igst_amount: calc.igst_amount,
+      total_tax_amount: calc.total_tax_amount,
+      total_amount: calc.grand_total,
+      isInterState: calc.is_inter_state,
+      // Compatibility aliases
       subtotalPaise: Math.round(calc.subtotal * 100),
       discountPaise: Math.round(calc.total_discount_amount * 100),
       taxablePaise: Math.round(calc.taxable_amount * 100),
@@ -538,22 +571,36 @@ export class TaxService {
       sgstPaise: Math.round(calc.sgst_amount * 100),
       igstPaise: Math.round(calc.igst_amount * 100),
       totalPaise: Math.round(calc.grand_total * 100),
-      isInterState: calc.is_inter_state,
-      items: calc.lines.map((l, i) => ({
-        productId: input.items[i]?.productId,
-        description: l.description,
-        quantity: l.quantity,
-        unitPricePaise: input.items[i]?.unitPricePaise || 0,
-        discountPct: input.items[i]?.discountPct || 0,
-        subtotalPaise: Math.round(l.gross_amount * 100),
-        hsnSac: l.hsn_sac_code || input.items[i]?.hsnSac,
-        gstRate: l.gst_rate,
-        gstType: input.items[i]?.gstType || 'exclusive',
-        cgstPaise: Math.round(l.cgst_amount * 100),
-        sgstPaise: Math.round(l.sgst_amount * 100),
-        igstPaise: Math.round(l.igst_amount * 100),
-        totalPaise: Math.round(l.line_total * 100),
-      })),
+      items: calc.lines.map((l, i) => {
+        const itemInput = input.items[i];
+        const unitPrice = itemInput?.unitPrice !== undefined ? itemInput.unitPrice : (itemInput?.unitPricePaise || 0) / 100;
+        return {
+          productId: itemInput?.productId,
+          description: l.description,
+          quantity: l.quantity,
+          unit_price: unitPrice,
+          discount_pct: itemInput?.discountPct || 0,
+          taxable_amount: l.taxable_amount,
+          hsn_sac: l.hsn_sac_code || itemInput?.hsnSac,
+          gst_rate: l.gst_rate,
+          gst_type: itemInput?.gstType || 'exclusive',
+          cgst_amount: l.cgst_amount,
+          sgst_amount: l.sgst_amount,
+          igst_amount: l.igst_amount,
+          total_amount: l.line_total,
+          // Compatibility paise aliases
+          unitPricePaise: Math.round(unitPrice * 100),
+          discountPct: itemInput?.discountPct || 0,
+          subtotalPaise: Math.round(l.gross_amount * 100),
+          hsnSac: l.hsn_sac_code || itemInput?.hsnSac,
+          gstRate: l.gst_rate,
+          gstType: itemInput?.gstType || 'exclusive',
+          cgstPaise: Math.round(l.cgst_amount * 100),
+          sgstPaise: Math.round(l.sgst_amount * 100),
+          igstPaise: Math.round(l.igst_amount * 100),
+          totalPaise: Math.round(l.line_total * 100),
+        };
+      }),
     };
   }
 }

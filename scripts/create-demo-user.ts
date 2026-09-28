@@ -16,7 +16,7 @@ async function createDemoAccount() {
 
   // 1. Check if user already exists in auth.users
   const { data: usersList } = await supabase.auth.admin.listUsers()
-  const existingUser = usersList?.users?.find((u) => u.email === DEMO_EMAIL)
+  const existingUser = usersList?.users?.find((u: any) => u.email === DEMO_EMAIL)
 
   let userId: string
 

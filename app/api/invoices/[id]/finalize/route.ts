@@ -28,16 +28,8 @@ export async function POST(
       })
     }
 
-    try {
-      const finalized = await finalizeInvoiceService(session.organization_id, session.user_id, id)
-      return NextResponse.json({ success: true, data: finalized })
-    } catch (serviceErr: any) {
-      const fin = demoFinalizeInvoice(id)
-      return NextResponse.json({
-        success: true,
-        data: fin || { id, status: 'issued', message: 'Invoice finalized successfully (demo)' },
-      })
-    }
+    const finalized = await finalizeInvoiceService(session.organization_id, session.user_id, id)
+    return NextResponse.json({ success: true, data: finalized })
   } catch (err: any) {
     console.error('[Invoice Finalize API] Error:', err)
     return NextResponse.json(

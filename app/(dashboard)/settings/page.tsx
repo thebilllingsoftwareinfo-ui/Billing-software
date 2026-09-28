@@ -21,15 +21,18 @@ import {
   Bell,
   Landmark,
   Coins,
-  ShieldCheck,
   Save,
   RotateCcw,
+  Building2,
+  ExternalLink,
+  ArrowRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TEMPLATE_OPTIONS, TEMPLATE_COLORS } from '@/lib/constants/invoice-templates'
 import { FONT_OPTIONS, applyAppFont, applyAppFontSize } from '@/components/layout/font-settings-provider'
 
 type SettingsTab =
+  | 'BUSINESS PROFILE'
   | 'GENERAL'
   | 'TRANSACTION'
   | 'PRINT'
@@ -42,6 +45,7 @@ type SettingsTab =
   | 'MULTI CURRENCY'
 
 const SETTINGS_TABS: SettingsTab[] = [
+  'BUSINESS PROFILE',
   'GENERAL',
   'TRANSACTION',
   'PRINT',
@@ -206,7 +210,7 @@ export default function VaniraSettingsPage() {
   const [secondaryCurrency, setSecondaryCurrency] = useState('USD')
   const [exchangeRate, setExchangeRate] = useState(86.5)
 
-  // Load from LocalStorage
+  // Load from LocalStorage & Handle Tab query params
   useEffect(() => {
     try {
       const s = JSON.parse(localStorage.getItem('vanira_full_settings') || '{}')
@@ -225,8 +229,30 @@ export default function VaniraSettingsPage() {
 
       const savedFont = localStorage.getItem('vanira_app_font') || 'lato'
       setSelectedFont(savedFont)
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        const tabParam = params.get('tab')
+        if (
+          tabParam === 'category' ||
+          tabParam === 'business-category' ||
+          tabParam === 'business-profile' ||
+          tabParam === 'profile'
+        ) {
+          router.replace('/settings/business-profile')
+          return
+        } else if (tabParam === 'print') {
+          setActiveTab('PRINT')
+        } else if (tabParam === 'tax') {
+          setActiveTab('TAXES & GST')
+        } else if (tabParam === 'party') {
+          setActiveTab('PARTY')
+        } else if (tabParam === 'item') {
+          setActiveTab('ITEM')
+        }
+      }
     } catch {}
-  }, [])
+  }, [router])
 
   // Handle Font Change
   const handleSelectFont = (fontId: string) => {
@@ -339,7 +365,13 @@ export default function VaniraSettingsPage() {
               <button
                 key={tab}
                 type="button"
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  if (tab === 'BUSINESS PROFILE') {
+                    router.push('/settings/business-profile')
+                    return
+                  }
+                  setActiveTab(tab)
+                }}
                 className={`w-full text-left px-4 py-2.5 text-xs font-bold tracking-wider transition-all cursor-pointer flex items-center justify-between ${
                   isActive
                     ? 'bg-white text-[#161928] rounded-l-md shadow-xs'
@@ -347,6 +379,9 @@ export default function VaniraSettingsPage() {
                 }`}
               >
                 <span>{tab}</span>
+                {tab === 'BUSINESS PROFILE' && (
+                  <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-white" />
+                )}
               </button>
             )
           })}
@@ -369,6 +404,53 @@ export default function VaniraSettingsPage() {
         </button>
 
         <div className="w-full max-w-6xl pr-6 p-6 md:p-8 flex-1">
+          {/* ═══════════════════════════════════════════════════════
+              TAB 0: BUSINESS PROFILE
+              ═══════════════════════════════════════════════════════ */}
+          {activeTab === 'BUSINESS PROFILE' && (
+            <div className="max-w-2xl space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white shadow-sm space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Business Profile &amp; Firm Identity</h2>
+                    <p className="text-xs text-gray-500">
+                      Manage your Business Name, Type, Category, GSTIN, Address, Logo, and Signature.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white border border-gray-200 space-y-2 text-xs text-gray-700">
+                  <p className="font-semibold text-gray-900">Single Source of Truth</p>
+                  <p className="text-gray-600 leading-relaxed">
+                    Business Type and Business Category are configured exclusively in your Business Profile.
+                    All downstream modules (Dashboard, Invoices, Items, Taxes) adapt automatically to these settings.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => router.push('/settings/business-profile')}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+                  >
+                    <Building2 className="h-4 w-4" />
+                    <span>Open Business Profile (Edit Profile)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('GENERAL')}
+                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    View General Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ═══════════════════════════════════════════════════════
               TAB 1: GENERAL (Pixel-matched with Screenshot 1)
               ═══════════════════════════════════════════════════════ */}
@@ -832,7 +914,7 @@ export default function VaniraSettingsPage() {
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════
+                    {/* ═══════════════════════════════════════════════════════
               TAB 2: TRANSACTION (Pixel-matched with Screenshot 2)
               ═══════════════════════════════════════════════════════ */}
           {activeTab === 'TRANSACTION' && (
@@ -1465,7 +1547,24 @@ export default function VaniraSettingsPage() {
               TAB 4: TAXES & GST
               ═══════════════════════════════════════════════════════ */}
           {activeTab === 'TAXES & GST' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-xs text-gray-800">
+            <div className="space-y-6">
+              {/* Deep Link to Full GST Master */}
+              <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-blue-900 block text-xs">Looking for Full GST & Tax Master?</span>
+                  <span className="text-[11px] text-blue-700">Configure UTGST territories, Composition schemes, and use the interactive tax breakdown calculator.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/settings/tax')}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs shrink-0 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>Open GST Master</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-xs text-gray-800">
               <div className="space-y-4">
                 <h3 className="font-bold text-xs text-gray-900 pb-1 border-b border-gray-100 uppercase tracking-wider">
                   GST Registration & Rates
@@ -1534,6 +1633,7 @@ export default function VaniraSettingsPage() {
                   <span>Reverse Charge Mechanism (RCM)</span>
                 </label>
               </div>
+            </div>
             </div>
           )}
 
@@ -1660,6 +1760,39 @@ export default function VaniraSettingsPage() {
                   className="w-14 px-2 py-1 border border-gray-300 rounded font-bold text-center"
                 />
                 <span className="text-gray-400">units</span>
+              </div>
+
+              {/* Deep Links to Unit Master & Barcode Studio */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg flex flex-col justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-indigo-950 block text-xs">Unit Master & Conversion Builder</span>
+                    <span className="text-[11px] text-indigo-700">Configure custom units (Box, Pcs, Bag, Kg, Gm) and unit conversions (1 Box = 10 Pcs).</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/inventory/units')}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer self-start"
+                  >
+                    <span>Manage Units</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg flex flex-col justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-violet-950 block text-xs">Barcode Studio & Label Printing</span>
+                    <span className="text-[11px] text-violet-700">Generate GS1-compliant EAN-13 & Code-128 barcodes, test scanners, and print thermal labels.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/inventory/barcodes')}
+                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer self-start"
+                  >
+                    <span>Open Barcode Studio</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           )}

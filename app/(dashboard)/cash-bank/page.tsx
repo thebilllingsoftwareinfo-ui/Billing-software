@@ -76,6 +76,69 @@ export default function CashAndBankPage() {
   const [newIfsc, setNewIfsc] = useState('')
   const [newUpi, setNewUpi] = useState('')
   const [newOpeningBal, setNewOpeningBal] = useState<number | ''>('')
+
+  // Live API Data Loading
+  const fetchAccounts = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/cash-bank/accounts')
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const mapped: BankAccount[] = json.data.map((a: any) => ({
+          id: a.id,
+          bankName: a.bank_name || a.account_name,
+          accountName: a.account_name,
+          accountNumber: a.account_number || '',
+          ifsc: a.ifsc_code || '',
+          upiId: a.upi_id || `${(a.account_name || 'user').toLowerCase().replace(/\s+/g, '')}@upi`,
+          balance: Number(a.current_balance) || 0,
+          accountType: a.account_type === 'cash' ? 'Savings' : 'Current',
+          isDefault: Boolean(a.is_default),
+        }))
+        setBankAccounts(mapped)
+        setSelectedBankId((curr) => {
+          if (!curr || !mapped.find((b) => b.id === curr)) {
+            return mapped[0].id
+          }
+          return curr
+        })
+      }
+    } catch (err) {
+      console.error('[Cash & Bank Page] Failed to fetch accounts:', err)
+    }
+  }, [])
+
+  const fetchTransactionsForAccount = React.useCallback(async (accId: string) => {
+    if (!accId) return
+    try {
+      const res = await fetch(`/api/cash-bank/transactions?account_id=${accId}&limit=50`)
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        const mappedTxns: BankTransaction[] = json.data.map((t: any) => ({
+          id: t.id,
+          type: t.direction === 'in' ? 'Payment In' : 'Payment Out',
+          name: t.narration || (t.reference_type ? `${t.reference_type.toUpperCase()} #${t.reference_number || t.reference_id}` : 'Transaction'),
+          date: t.transaction_date,
+          amount: Number(t.amount) || 0,
+        }))
+        setTransactions((prev) => ({
+          ...prev,
+          [accId]: mappedTxns,
+        }))
+      }
+    } catch (err) {
+      console.error('[Cash & Bank Page] Failed to fetch transactions:', err)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    fetchAccounts()
+  }, [fetchAccounts])
+
+  React.useEffect(() => {
+    if (selectedBankId) {
+      fetchTransactionsForAccount(selectedBankId)
+    }
+  }, [selectedBankId, fetchTransactionsForAccount])
   
   // Selected Bank & Transactions
   const selectedBank = useMemo(() => bankAccounts.find(b => b.id === selectedBankId), [bankAccounts, selectedBankId])
@@ -88,27 +151,52 @@ export default function CashAndBankPage() {
     )
   }, [bankAccounts, accountSearchQuery])
   
-  const handleAddBank = (e: React.FormEvent) => {
+  const handleAddBank = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newBankName.trim() || !newAccountNum.trim()) {
       toast.error('Bank name and account number are required')
       return
     }
 
-    const newAcc: BankAccount = {
-      id: `bank-${Date.now()}`,
-      bankName: newBankName,
-      accountName: newBankName,
-      accountNumber: newAccountNum,
-      ifsc: newIfsc.toUpperCase(),
-      upiId: newUpi || `${newAccountNum.slice(-4)}@upi`,
-      balance: newOpeningBal ? Number(newOpeningBal) : 0,
-      accountType: 'Current',
-      isDefault: false,
+    try {
+      const res = await fetch('/api/cash-bank/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_name: newBankName,
+          account_type: 'bank',
+          bank_name: newBankName,
+          account_number: newAccountNum,
+          ifsc_code: newIfsc.toUpperCase(),
+          upi_id: newUpi || `${newAccountNum.slice(-4)}@upi`,
+          opening_balance: newOpeningBal ? Number(newOpeningBal) : 0,
+          is_default: false,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(`${newBankName} account added successfully!`)
+        fetchAccounts()
+      } else {
+        toast.error(json.error || 'Failed to add bank account')
+      }
+    } catch {
+      // Optimistic local add
+      const newAcc: BankAccount = {
+        id: `bank-${Date.now()}`,
+        bankName: newBankName,
+        accountName: newBankName,
+        accountNumber: newAccountNum,
+        ifsc: newIfsc.toUpperCase(),
+        upiId: newUpi || `${newAccountNum.slice(-4)}@upi`,
+        balance: newOpeningBal ? Number(newOpeningBal) : 0,
+        accountType: 'Current',
+        isDefault: false,
+      }
+      setBankAccounts((prev) => [...prev, newAcc])
+      toast.success(`${newBankName} account added successfully!`)
     }
 
-    setBankAccounts((prev) => [...prev, newAcc])
-    toast.success(`${newBankName} account added successfully!`)
     setIsAddBankMode(false)
     setNewBankName('')
     setNewAccountNum('')

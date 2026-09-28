@@ -5,6 +5,7 @@ import { createInvoiceSchema } from '@/lib/validators/invoice.schema'
 import { can } from '@/lib/auth/permissions'
 import { getApiSession } from '@/lib/auth/api-session'
 import { demoGetInvoices, demoAddInvoice } from '@/lib/services/demo-store'
+import { SalesTransactionService } from '@/lib/services/sales-transaction.service'
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +25,16 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '15', 10)
     const offset = (page - 1) * limit
+
+    if (session.is_demo || session.user_id.includes('demo')) {
+      const demoRes = demoGetInvoices({ q, status, page, limit })
+      return NextResponse.json({
+        success: true,
+        data: demoRes.invoices,
+        pagination: demoRes.pagination,
+        summary: demoRes.summary,
+      })
+    }
 
     const supabase = await createClient()
 
@@ -123,6 +134,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    if (!body.customer_id || body.customer_id === 'walk-in' || body.customer_id === 'cash') {
+      body.customer_id = 'cust-demo-walk-in'
+    }
     const parsed = createInvoiceSchema.safeParse(body)
 
     if (!parsed.success) {
@@ -132,31 +146,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (session.user_id.includes('demo')) {
-      const demoInv = demoAddInvoice({
-        ...parsed.data,
-        organization_id: session.organization_id,
-      })
-      return NextResponse.json({
-        success: true,
-        data: demoInv,
-      }, { status: 201 })
-    }
+    const idempotencyKey =
+      request.headers.get('x-idempotency-key') ||
+      request.headers.get('idempotency-key') ||
+      body.idempotency_key ||
+      null
 
-    try {
-      const invoice = await createInvoiceService(session.organization_id, session.user_id, parsed.data)
-      return NextResponse.json({ success: true, data: invoice }, { status: 201 })
-    } catch (serviceErr: any) {
-      console.warn('[Invoices POST API] Database creation failed, falling back to demo store:', serviceErr.message)
-      const demoInv = demoAddInvoice({
-        ...parsed.data,
-        organization_id: session.organization_id,
-      })
-      return NextResponse.json({
+    const txnResult = await SalesTransactionService.executeSale(session, parsed.data, idempotencyKey)
+
+    return NextResponse.json(
+      {
         success: true,
-        data: demoInv,
-      }, { status: 201 })
-    }
+        data: txnResult.invoice,
+        meta: {
+          stockMovementsCount: txnResult.stockMovementsCount,
+          customerLedgerCreated: txnResult.customerLedgerCreated,
+          paymentCreated: txnResult.paymentCreated,
+          cashBankTxnCreated: txnResult.cashBankTxnCreated,
+          isDuplicate: txnResult.isDuplicate,
+        },
+      },
+      { status: 201 }
+    )
   } catch (err: any) {
     console.error('[Invoices POST API] Error:', err)
     return NextResponse.json(

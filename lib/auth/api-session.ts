@@ -12,6 +12,7 @@ export interface ApiSession {
   user_id: string
   organization_id: string
   role: OrgRole
+  is_demo?: boolean
 }
 
 /**
@@ -21,18 +22,6 @@ export interface ApiSession {
  */
 export async function getApiSession(): Promise<ApiSession | null> {
   try {
-    // 1. Check demo_auth cookie first
-    const cookieStore = await cookies()
-    const demoCookie = cookieStore.get('demo_auth')
-    if (demoCookie?.value === 'true') {
-      return {
-        user_id: 'usr-owner-demo-1111',
-        organization_id: '11111111-1111-1111-1111-111111111111',
-        role: 'owner' as OrgRole,
-      }
-    }
-
-    // 2. Fall back to Supabase Auth
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 

@@ -4,7 +4,7 @@ import { logAudit } from '@/lib/services/audit.service'
 import { customerSchema } from '@/lib/validators/customer.schema'
 import { can } from '@/lib/auth/permissions'
 import { getApiSession } from '@/lib/auth/api-session'
-import { demoGetCustomer, demoUpdateCustomer, demoDeleteCustomer } from '@/lib/services/demo-store'
+import { demoGetCustomer, demoUpdateCustomer, demoDeleteCustomer, demoGetCustomerTransactions, demoGetCustomerDetails } from '@/lib/services/demo-store'
 
 export async function GET(
   request: NextRequest,
@@ -33,23 +33,11 @@ export async function GET(
       .single()
 
     if (customerError || !customer) {
-      const demoCust = demoGetCustomer(id)
-      if (demoCust) {
+      const demoDetails = demoGetCustomerDetails(id)
+      if (demoDetails) {
         return NextResponse.json({
           success: true,
-          data: {
-            customer: demoCust,
-            summary: {
-              totalSales: 45000,
-              paidAmount: 30500,
-              outstanding: demoCust.outstanding_balance || 0,
-              creditLimit: demoCust.credit_limit || 0,
-            },
-            invoices: [],
-            payments: [],
-            quotations: [],
-            transactions: [],
-          },
+          data: demoDetails,
         })
       }
       return NextResponse.json({ success: false, error: 'Customer not found' }, { status: 404 })
@@ -67,8 +55,7 @@ export async function GET(
     const { data: payments } = await supabase
       .from('payments')
       .select('*')
-      .eq('party_type', 'customer')
-      .eq('party_id', id)
+      .eq('customer_id', id)
       .eq('organization_id', session.organization_id)
       .order('payment_date', { ascending: false })
 
@@ -89,9 +76,9 @@ export async function GET(
       .order('transaction_date', { ascending: false })
 
     // Calculate financial summary totals
-    const totalSales = invoices?.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) || 0
-    const paidAmount = invoices?.reduce((sum, inv) => sum + (Number(inv.paid_amount) || 0), 0) || 0
-    const outstanding = Number(customer.outstanding_balance) || (totalSales - paidAmount)
+    const totalSales = invoices?.reduce((sum, inv) => sum + (Number(inv.total_amount ?? (inv.total ? inv.total / 100 : 0)) || 0), 0) || 0
+    const paidAmount = invoices?.reduce((sum, inv) => sum + (Number(inv.amount_paid ?? inv.paid_amount ?? (inv.paid ? inv.paid / 100 : 0)) || 0), 0) || 0
+    const outstanding = Number(customer.outstanding_balance ?? (customer.outstanding ? customer.outstanding / 100 : 0)) || Math.max(0, totalSales - paidAmount)
 
     return NextResponse.json({
       success: true,

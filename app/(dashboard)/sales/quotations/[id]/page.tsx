@@ -81,13 +81,14 @@ export default function QuotationDetailPage({
     }
   }
 
-  // 1-Click Convert to Sales Invoice
-  // Preserves original quotation intact, creates new Sales Invoice, links converted_invoice_id
-  async function handleConvertToInvoice() {
+  // Multi-target Conversion: Invoice, Sales Order, or Proforma Invoice
+  async function handleConvert(target: 'invoice' | 'sales_order' | 'proforma') {
     try {
       setConverting(true);
       const res = await fetch(`/api/quotations/${id}/convert`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
       });
 
       const data = await res.json();
@@ -95,9 +96,19 @@ export default function QuotationDetailPage({
         throw new Error(data.error || 'Failed to convert quotation');
       }
 
-      toast.success(`Converted to Sales Invoice #${data.invoice_number}! Original quotation preserved.`);
-      fetchQuotation();
-      router.push(`/sales/invoices/${data.invoice_id}`);
+      if (target === 'sales_order') {
+        toast.success(`Converted to Sales Order #${data.order_number}!`);
+        fetchQuotation();
+        router.push(`/sales/orders/${data.order_id}`);
+      } else if (target === 'proforma') {
+        toast.success(`Converted to Proforma Invoice #${data.proforma_number}!`);
+        fetchQuotation();
+        router.push(`/sales/proforma-invoices/${data.proforma_id}`);
+      } else {
+        toast.success(`Converted to Sales Invoice #${data.invoice_number}! Original quotation preserved.`);
+        fetchQuotation();
+        router.push(`/sales/invoices/${data.invoice_id}`);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Conversion failed');
     } finally {
@@ -194,22 +205,42 @@ export default function QuotationDetailPage({
             </>
           )}
 
-          {/* 1-Click Convert to Invoice Button */}
+          {/* Multi-Target Conversion Options */}
           {!isConverted && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleConvertToInvoice}
-              disabled={converting}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
-            >
-              {converting ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <ArrowRightLeft className="w-4 h-4 mr-1.5" />
-              )}
-              Convert to Sales Invoice
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleConvert('sales_order')}
+                disabled={converting}
+                className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 font-medium"
+              >
+                <ArrowRightLeft className="w-4 h-4" /> Convert to Sales Order
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleConvert('proforma')}
+                disabled={converting}
+                className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 font-medium"
+              >
+                <FileText className="w-4 h-4" /> Convert to Proforma
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleConvert('invoice')}
+                disabled={converting}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-1.5"
+              >
+                {converting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="w-4 h-4" />
+                )}
+                Convert to Invoice
+              </Button>
+            </>
           )}
 
           <Button variant="outline" size="sm" onClick={() => setIsPreviewOpen(true)}>

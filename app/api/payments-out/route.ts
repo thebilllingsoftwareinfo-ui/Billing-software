@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/session';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PurchaseService } from '@/lib/services/purchase.service';
 
 // In-memory fallback store for demo/development
 interface LocalPaymentOut {
@@ -137,13 +138,34 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString(),
     };
 
+    const session = await getServerSession();
+
+    // If session and supplier party_id are present, record through authoritative supplier payment ledger
+    if (session && body.party_id) {
+      const payAmount = Number(body.amount_paise) / 100;
+      const method = (body.payment_type || 'cash').toLowerCase().includes('bank')
+        ? 'bank'
+        : (body.payment_type || 'cash').toLowerCase().includes('upi')
+        ? 'upi'
+        : 'cash';
+
+      await PurchaseService.recordSupplierPayment(session, {
+        supplier_id: body.party_id,
+        purchase_bill_id: body.purchase_bill_id || null,
+        amount: payAmount,
+        payment_date: newRecord.payment_date,
+        payment_method: method as any,
+        reference_number: newRecord.reference_no,
+        notes: newRecord.description,
+      });
+    }
+
     // Store in memory
     localPaymentsOut.unshift(newRecord);
 
     // Try storing in Supabase if exists
-    try {
-      const session = await getServerSession();
-      if (session) {
+    if (session) {
+      try {
         const orgId = session.organization_id || session.organization?.id;
         const supabase = createAdminClient();
         await supabase.from('payments_out').insert({
@@ -158,9 +180,9 @@ export async function POST(req: NextRequest) {
           description: newRecord.description,
           receipt_url: newRecord.receipt_url,
         } as any);
+      } catch {
+        // ignore db errors if table doesn't exist
       }
-    } catch {
-      // In-memory handles persistence for dev
     }
 
     return NextResponse.json(newRecord, { status: 201 });

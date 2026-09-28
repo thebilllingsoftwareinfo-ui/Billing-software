@@ -6,6 +6,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Loader2, X, Package, Tag, Calculator, Layers, AlertCircle, Plus } from 'lucide-react'
 import { productSchema, ProductFormInput, VALID_GST_RATES } from '@/lib/validators/product.schema'
+import { useCategoryConfig } from '@/lib/hooks/useCategoryConfig'
+
+const TOP_LEVEL_FIELDS = ['metal_type', 'metal_weight', 'is_live_price', 'purity', 'gross_weight', 'net_weight', 'stone_weight', 'stone_value', 'wastage_pct', 'making_charge', 'making_charge_type']
+
 
 interface ProductFormModalProps {
   isOpen: boolean
@@ -27,6 +31,7 @@ export function ProductFormModal({
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [metalRates, setMetalRates] = useState<Record<string, number>>({})
 
+  const config = useCategoryConfig()
   const isEditing = Boolean(initialData?.id)
 
   const {
@@ -99,6 +104,7 @@ export function ProductFormModal({
         is_live_price: initialData.is_live_price || false,
         metal_type: initialData.metal_type || null,
         metal_weight: initialData.metal_weight ? Number(initialData.metal_weight) : null,
+        custom_fields: initialData.custom_fields || {},
       })
     } else {
       reset({
@@ -182,7 +188,7 @@ export function ProductFormModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-gray-900">
-                {isEditing ? 'Edit Product Catalog Item' : 'Add Product to Catalog'}
+                {isEditing ? `Edit ${config.terminology.product}` : `Add ${config.terminology.product}`}
               </h2>
               <p className="text-xs text-gray-500">Specify pricing, HSN code, GST rate, and reorder levels.</p>
             </div>
@@ -204,7 +210,7 @@ export function ProductFormModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 sm:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700">
-                  Product Name <span className="text-red-500">*</span>
+                  {config.terminology.product} Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -298,8 +304,8 @@ export function ProductFormModal({
                   {...register('unit_id')}
                   className="w-full h-10 px-3 text-sm rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="">Select Unit (e.g. PCS, BOX)</option>
-                  {units.map((u) => (
+                  <option value="">Select Unit</option>
+                  {config.features.measurements.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.abbreviation})
                     </option>
@@ -313,40 +319,46 @@ export function ProductFormModal({
           <div className="border-t border-gray-100 pt-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">2. Pricing & GST Tax</h3>
-              <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                <input type="checkbox" {...register('is_live_price')} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
-                Auto-calculate from Live Metal Rates
-              </label>
+              {config.id === 'jewelry' && (
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                  <input type="checkbox" {...register('is_live_price')} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                  Auto-calculate from Live Metal Rates
+                </label>
+              )}
             </div>
 
-            {isLivePrice && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-amber-50/50 p-4 rounded-xl border border-amber-100">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-amber-900">Metal Type</label>
-                  <select
-                    {...register('metal_type')}
-                    className="w-full h-10 px-3 text-sm rounded-xl border border-amber-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">Select Metal...</option>
-                    <option value="gold_24k">Gold 24K (₹{metalRates.gold_24k || 0}/g)</option>
-                    <option value="gold_22k">Gold 22K (₹{metalRates.gold_22k || 0}/g)</option>
-                    <option value="gold_18k">Gold 18K (₹{metalRates.gold_18k || 0}/g)</option>
-                    <option value="silver">Silver (₹{metalRates.silver || 0}/g)</option>
-                    <option value="diamond">Diamond (₹{metalRates.diamond || 0}/ct)</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-amber-900">Weight (grams / ct)</label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    placeholder="e.g. 5.500"
-                    {...register('metal_weight', { valueAsNumber: true })}
-                    className="w-full h-10 px-3 text-sm rounded-xl border border-amber-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
+            {config.features.products.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                {config.features.products.map((field) => {
+                  const fieldName = TOP_LEVEL_FIELDS.includes(field.id) ? field.id : `custom_fields.${field.id}`
+                  return (
+                    <div key={field.id} className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">{field.label}</label>
+                      {field.type === 'select' ? (
+                        <select
+                          {...register(fieldName as any)}
+                          className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">Select {field.label}...</option>
+                          {field.options?.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type === 'number' ? 'number' : 'text'}
+                          step={field.type === 'number' ? 'any' : undefined}
+                          placeholder={field.label}
+                          {...register(fieldName as any, { valueAsNumber: field.type === 'number' })}
+                          className="w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
+
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">

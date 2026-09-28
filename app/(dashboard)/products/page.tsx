@@ -39,14 +39,14 @@ import { TrendingUp } from 'lucide-react'
 
 export interface ItemTransaction {
   id: string
-  type: 'Sale' | 'Purchase' | 'Adjustment' | 'Return'
+  type: 'Sale' | 'Purchase' | 'Adjustment' | 'Return' | 'Opening Stock'
   refNo: string
   partyName: string
   date: string
   quantity: number
   unit: string
   pricePerUnit: number
-  status: 'Paid' | 'Unpaid' | 'Approved' | 'Cancelled'
+  status: 'Paid' | 'Unpaid' | 'Approved' | 'Cancelled' | 'Recorded'
 }
 
 export interface MasterItem {
@@ -153,14 +153,67 @@ export default function ProductsPage() {
     }
   }, [actionParam])
 
-  // Load existing items from backend API if available
+  // Load existing items and sales transactions from backend API
   useEffect(() => {
-    fetch('/api/products')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.data && data.data.length > 0) {
-          const mapped: MasterItem[] = data.data.map((p: any) => {
+    Promise.all([
+      fetch('/api/products?limit=200').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/invoices?limit=200').then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([prodData, invData]) => {
+        if (prodData.success && prodData.data && prodData.data.length > 0) {
+          const invoices: any[] = invData.success && Array.isArray(invData.data) ? invData.data : []
+
+          const mapped: MasterItem[] = prodData.data.map((p: any) => {
             const existing = INITIAL_ITEMS.find((init) => init.name.toLowerCase() === p.name?.toLowerCase())
+            const prodUnit = p.product_units?.abbreviation || p.unit || 'PCS'
+            const itemTransactions: ItemTransaction[] = []
+
+            // 1. Add sales invoices that include this product
+            invoices.forEach((inv) => {
+              const matchingRows = (inv.items || inv.invoice_items || []).filter(
+                (row: any) =>
+                  row.product_id === p.id ||
+                  (row.description && row.description.toLowerCase().trim() === p.name?.toLowerCase().trim())
+              )
+
+              matchingRows.forEach((row: any, rIdx: number) => {
+                itemTransactions.push({
+                  id: `tx-sale-${inv.id}-${rIdx}`,
+                  type: 'Sale',
+                  refNo: inv.invoice_number || `INV-${inv.id.slice(-4)}`,
+                  partyName: inv.customer_name || inv.customers?.display_name || 'Customer',
+                  date: new Date(inv.invoice_date || inv.created_at).toLocaleDateString('en-GB'),
+                  quantity: Number(row.quantity) || 1,
+                  unit: row.unit || prodUnit,
+                  pricePerUnit: Number(row.unit_price) || Number(p.sale_price) || 0,
+                  status: inv.status === 'paid' ? 'Paid' : (inv.status === 'issued' ? 'Unpaid' : 'Approved'),
+                })
+              })
+            })
+
+            // 2. Add opening stock transaction if recorded
+            if (Number(p.opening_stock) > 0) {
+              itemTransactions.push({
+                id: `tx-open-${p.id}`,
+                type: 'Opening Stock',
+                refNo: 'OPENING',
+                partyName: 'Opening Balance',
+                date: new Date(p.created_at || Date.now()).toLocaleDateString('en-GB'),
+                quantity: Number(p.opening_stock),
+                unit: prodUnit,
+                pricePerUnit: Number(p.purchase_price) || 0,
+                status: 'Recorded',
+              })
+            }
+
+            // Fallback to sample static transactions if none existed
+            const finalTransactions =
+              itemTransactions.length > 0
+                ? itemTransactions
+                : existing
+                ? existing.transactions
+                : []
+
             return {
               id: p.id,
               name: p.name,
@@ -170,9 +223,9 @@ export default function ProductsPage() {
               sale_price: Number(p.sale_price) || 0,
               purchase_price: Number(p.purchase_price) || 0,
               current_stock: Number(p.current_stock ?? p.opening_stock ?? 0),
-              unit: p.product_units?.abbreviation || p.unit || 'PCS',
+              unit: prodUnit,
               category: p.product_categories?.name || p.category || 'General',
-              transactions: existing ? existing.transactions : [],
+              transactions: finalTransactions,
             }
           })
 

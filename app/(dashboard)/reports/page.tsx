@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, ShoppingBag, Package, PieChart, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
+import { TrendingUp, ShoppingBag, Package, PieChart, ShieldAlert, BookOpen, Scale, ArrowUpRight } from 'lucide-react';
 import { ReportFilterBar } from '@/components/reports/report-filter-bar';
 import { ReportTable, ColumnDef } from '@/components/reports/report-table';
 import { ReportDatePreset } from '@/lib/services/report.service';
@@ -408,6 +409,45 @@ export default function ReportsPage() {
           Financial Reports
         </button>
       </div>
+
+      {/* Accounting Statements Banner when on Financial Tab */}
+      {activeTab === 'financial' && (
+        <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <BookOpen className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+            <div>
+              <span className="text-sm font-semibold text-indigo-950 block">Official Double-Entry Accounting Statements</span>
+              <span className="text-xs text-indigo-700">Audit-ready General Ledger, Trial Balance, Income Statement, and Balance Sheet.</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/accounting/general-ledger"
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-50 shadow-2xs"
+            >
+              General Ledger <ArrowUpRight className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/accounting/trial-balance"
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-50 shadow-2xs"
+            >
+              Trial Balance <ArrowUpRight className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/accounting/profit-and-loss"
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-50 shadow-2xs"
+            >
+              Profit & Loss <ArrowUpRight className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/accounting/balance-sheet"
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-50 shadow-2xs"
+            >
+              Balance Sheet <ArrowUpRight className="w-3 h-3" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Filter Control Bar */}
       <ReportFilterBar

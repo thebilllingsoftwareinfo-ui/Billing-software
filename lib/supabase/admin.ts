@@ -13,13 +13,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-let adminClient: ReturnType<typeof createClient> | undefined
+let adminClient: any | undefined
 
 /**
  * Returns a singleton Supabase admin client (service-role key).
  * Bypasses Row Level Security — use with extreme caution.
  */
-export function createAdminClient() {
+export function createAdminClient(): any {
   if (adminClient) return adminClient
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

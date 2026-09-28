@@ -9,22 +9,30 @@ export default async function DashboardPage() {
   const category: BusinessCategory = session.organization.business_category ?? 'retail'
 
   let hasInvoices = false
-  try {
-    const supabase = await createClient()
-    const { count } = await supabase
-      .from('invoices')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', session.organization.id)
-    hasInvoices = (count ?? 0) > 0
-  } catch {
-    hasInvoices = false
-  }
+  const isDemo =
+    Boolean(session.user?.email?.includes('demo')) ||
+    Boolean(session.user_id?.includes('demo')) ||
+    session.organization?.id === '11111111-1111-1111-1111-111111111111' ||
+    session.organization_id === '11111111-1111-1111-1111-111111111111' ||
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  // Fallback: in demo mode or when demo data is used
-  if (!hasInvoices) {
+  if (isDemo) {
     const demo = demoGetInvoices({ limit: 1 })
-    if (demo.invoices && demo.invoices.length > 0) {
-      hasInvoices = true
+    hasInvoices = Boolean(demo.invoices && demo.invoices.length > 0)
+  } else {
+    try {
+      const supabase = await createClient()
+      const { count } = await Promise.race([
+        supabase
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', session.organization.id),
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 800)),
+      ])
+      hasInvoices = (count ?? 0) > 0
+    } catch {
+      hasInvoices = false
     }
   }
 

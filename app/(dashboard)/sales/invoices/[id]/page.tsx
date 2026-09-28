@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { InvoicePDFPreviewModal } from '@/components/invoices/invoice-pdf-preview-modal'
+import { DocumentCancellationModal } from '@/components/common/document-cancellation-modal'
 import { PDFTemplateType, TEMPLATE_OPTIONS } from '@/lib/constants/invoice-templates'
 import { numberToRupeeWords } from '@/lib/utils/number-to-words'
 import { buildUpiDeepLink, generateQrDataUrl } from '@/lib/utils/upi-qr'
@@ -43,6 +44,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const [invoice, setInvoice] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<PDFTemplateType>('standard')
@@ -146,25 +148,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handleCancel = async () => {
-    const reason = prompt(`Enter reason for cancelling invoice '${invoice?.invoice_number}':`)
-    if (!reason) return
-
-    try {
-      const res = await fetch(`/api/invoices/${id}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast.success(`Invoice ${invoice?.invoice_number} cancelled successfully`)
-        fetchInvoiceDetails()
-      } else {
-        toast.error(json.error || 'Failed to cancel invoice')
-      }
-    } catch (err) {
-      toast.error('Error cancelling invoice')
+  const handleCancelConfirm = async (reason: string) => {
+    const res = await fetch(`/api/invoices/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    const json = await res.json()
+    if (json.success) {
+      toast.success(`Invoice ${invoice?.invoice_number} cancelled and reversed successfully`)
+      fetchInvoiceDetails()
+    } else {
+      throw new Error(json.error || 'Failed to cancel invoice')
     }
   }
 
@@ -323,8 +318,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
             {invoice.status !== 'cancelled' && invoice.status !== 'void' && (
               <button
-                onClick={handleCancel}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-semibold rounded-xl transition-colors"
+                onClick={() => setCancelModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
               >
                 <Ban className="h-4 w-4" /> Cancel Invoice
               </button>
@@ -970,6 +965,19 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         totalAmount={total}
         organizationName={org?.name}
       />
+
+      {/* Invoice Cancellation Confirmation Modal */}
+      {invoice && (
+        <DocumentCancellationModal
+          open={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          onConfirm={handleCancelConfirm}
+          documentType="Sales Invoice"
+          documentNumber={invoice.invoice_number}
+          partyName={customer?.display_name || customer?.name || 'Customer'}
+          amount={total}
+        />
+      )}
     </div>
   )
 }

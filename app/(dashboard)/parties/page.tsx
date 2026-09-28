@@ -584,6 +584,12 @@ export default function PartiesPage() {
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
+                  <a
+                    href={selectedParty.partyType === 'supplier' ? `/suppliers/${selectedParty.id}` : `/customers/${selectedParty.id}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md transition-colors"
+                  >
+                    View 360°
+                  </a>
                 </div>
                 
                 <div className="text-xs text-gray-500">

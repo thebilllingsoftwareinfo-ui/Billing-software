@@ -69,13 +69,21 @@ export default function SalesInvoicesPage() {
   })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (search) params.set('q', search)
+      if (debouncedSearch) params.set('q', debouncedSearch)
       if (statusFilter !== 'all') params.set('status', statusFilter)
       params.set('limit', '100')
 
@@ -94,7 +102,7 @@ export default function SalesInvoicesPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [debouncedSearch, statusFilter])
 
   useEffect(() => {
     fetchInvoices()
