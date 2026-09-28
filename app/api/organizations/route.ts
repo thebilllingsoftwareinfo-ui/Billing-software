@@ -50,25 +50,45 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Step 4: Create organization ──────────────────────
-    const { data: org, error: orgError } = await supabase
+    const orgId = crypto.randomUUID()
+    const orgPayload: Record<string, unknown> = {
+      id: orgId,
+      name: values.name,
+      gstin: values.gstin || null,
+      pan: values.pan || null,
+      state_code: values.state_code || null,
+      invoice_prefix: values.invoice_prefix,
+      financial_year_start: values.financial_year_start,
+      business_category: values.business_category,
+      business_type: values.business_type || null,
+    }
+
+    let { error: orgError } = await supabase
       .from('organizations')
-      .insert({
+      .insert(orgPayload)
+
+    // Graceful fallback if business_category or business_type column does not exist yet
+    if (orgError && (orgError.code === '42703' || orgError.code === 'PGRST204')) {
+      console.warn('[Setup API] Column missing in organizations table, falling back to base columns:', orgError.message)
+      const basePayload = {
+        id: orgId,
         name: values.name,
         gstin: values.gstin || null,
         pan: values.pan || null,
         state_code: values.state_code || null,
-        address: values.address || null,
         invoice_prefix: values.invoice_prefix,
         financial_year_start: values.financial_year_start,
-        business_category: values.business_category,
-      })
-      .select()
-      .single()
+      }
+      const retry = await supabase
+        .from('organizations')
+        .insert(basePayload)
+      orgError = retry.error
+    }
 
-    if (orgError || !org) {
+    if (orgError) {
       console.error('[Setup API] Failed to create org:', orgError)
       return NextResponse.json(
-        { success: false, error: 'Failed to create organization.' },
+        { success: false, error: orgError?.message || 'Failed to create organization.' },
         { status: 500 },
       )
     }
@@ -77,7 +97,7 @@ export async function POST(request: NextRequest) {
     const { error: memberError } = await supabase
       .from('organization_members')
       .insert({
-        organization_id: org.id,
+        organization_id: orgId,
         user_id: user.id,
         role: 'owner',
         status: 'active',
@@ -85,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     if (memberError) {
       // Rollback org creation
-      await supabase.from('organizations').delete().eq('id', org.id)
+      await supabase.from('organizations').delete().eq('id', orgId)
       console.error('[Setup API] Failed to create member:', memberError)
       return NextResponse.json(
         { success: false, error: 'Failed to set up membership.' },
@@ -93,22 +113,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── Step 6: Create default settings ─────────────────
-    await supabase.from('organization_settings').insert({
-      organization_id: org.id,
-    })
+    // ── Step 6: Create business profile & default settings ──
+    try {
+      await supabase.from('business_profiles').insert({
+        organization_id: orgId,
+        trade_name: values.name,
+        business_type: values.business_type?.toLowerCase() || 'proprietorship',
+      })
+    } catch (e) {
+      console.warn('[Setup API] Business profile creation notice:', e)
+    }
 
     // ── Step 7: Audit log ────────────────────────────────
     await logAudit({
-      organization_id: org.id,
+      organization_id: orgId,
       user_id: user.id,
       action: 'created',
       resource_type: 'organization',
-      resource_id: org.id,
-      new_values: { name: org.name, gstin: org.gstin },
+      resource_id: orgId,
+      new_values: { name: values.name, gstin: values.gstin },
     })
 
-    return NextResponse.json({ success: true, data: { organization_id: org.id } })
+    return NextResponse.json({ success: true, data: { organization_id: orgId } })
   } catch (err) {
     console.error('[Setup API] Unexpected error:', err)
     return NextResponse.json(

@@ -84,7 +84,7 @@ export async function getServerSession(): Promise<AppSession> {
   }
 
   // Fetch the user's active organization membership
-  const { data: member, error: memberError } = await supabase
+  let { data: member, error: memberError } = await supabase
     .from('organization_members')
     .select(
       `
@@ -106,6 +106,34 @@ export async function getServerSession(): Promise<AppSession> {
     .order('created_at', { ascending: true })
     .limit(1)
     .single()
+
+  // Graceful fallback if business_category column is not present in schema cache yet
+  if (memberError && (memberError.code === '42703' || memberError.code === 'PGRST204')) {
+    const fallback = await supabase
+      .from('organization_members')
+      .select(
+        `
+        id,
+        role,
+        status,
+        organization_id,
+        organizations (
+          id,
+          name,
+          gstin,
+          logo_url
+        )
+      `,
+      )
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single()
+
+    member = fallback.data as any
+    memberError = fallback.error
+  }
 
   if (memberError || !member) {
     redirect('/setup')
